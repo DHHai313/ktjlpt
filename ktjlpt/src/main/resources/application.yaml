@@ -1,0 +1,20 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /ktjlpt
+spring:
+  application:
+    name: ktjlpt
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/jlpt?TimeZone=Asia/Ho_Chi_Minh
+    username: admin
+    password: kaito2004
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  jwt:
+    signerKey: "jzzMoshSc+dhmxTHzpZ1+T+DH3SfPO7idcJ6JrlsIjZgB6zI8N2PvJr6g3XjiQIIbt60Tkq4Fi56K4LBnTuYkg=="
