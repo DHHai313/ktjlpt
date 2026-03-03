@@ -6,11 +6,14 @@ import kaito.jlpt.ktjlpt.dto.request.UserCreationRequest;
 import kaito.jlpt.ktjlpt.dto.request.UserUpdateRequest;
 import kaito.jlpt.ktjlpt.dto.response.UserResponse;
 import kaito.jlpt.ktjlpt.service.UserService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-
+@Slf4j
 @RestController
 @RequestMapping("/users")
 public class UserController {
@@ -25,20 +28,41 @@ public class UserController {
         return apiResponse;
     }
     @GetMapping()
-    List<UserResponse> getUsers(){
-        return userService.getUsers();
+    ApiResponse<List<UserResponse>> getUsers(){
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        List<String> roles = authentication.getAuthorities()
+                .stream()
+                .map(GrantedAuthority::getAuthority)
+                .toList();
+        log.info("username: {}", authentication.getName());
+        log.info("scope: {}", roles);
+        return ApiResponse.<List<UserResponse>>builder()
+                .result(userService.getUsers())
+                .build();
     }
     @GetMapping("/{userId}")
-    UserResponse getUser(@PathVariable String userId){
-        return userService.getUser(userId);
+    ApiResponse<UserResponse> getUser(@PathVariable String userId){
+        return ApiResponse.<UserResponse>builder()
+                .result(userService.getUser(userId))
+                .build();
+    }
+    @GetMapping("/myInfo")
+    ApiResponse<UserResponse> getMyInfo(){
+        return ApiResponse.<UserResponse>builder()
+                .result(userService.getMyInfo())
+                .build();
     }
     @PutMapping("/{userId}")
-    UserResponse updateUser(@PathVariable String userId,@RequestBody UserUpdateRequest request){
-        return userService.updateUser(userId,request);
+    ApiResponse<UserResponse> updateUser(@PathVariable String userId,@RequestBody UserUpdateRequest request){
+        return ApiResponse.<UserResponse>builder()
+                .result(userService.updateUser(userId, request))
+                .build();
     }
     @DeleteMapping("/{userId}")
-    String deleteUser(@PathVariable String userId){
+    ApiResponse<Object> deleteUser(@PathVariable String userId){
         userService.deleteUser(userId);
-        return "user has been deleted";
+        return ApiResponse.builder()
+                .result("deleted")
+                .build();
     }
 }

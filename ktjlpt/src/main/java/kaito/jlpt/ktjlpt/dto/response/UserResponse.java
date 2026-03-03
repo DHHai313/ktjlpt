@@ -4,6 +4,8 @@ import kaito.jlpt.ktjlpt.enums.Role;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+import java.util.Set;
+
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -16,6 +18,6 @@ public class UserResponse {
     String fullName;
     String currentLevel;
     String avatarUrl;
-    Role role;
+
     Boolean active;
 }

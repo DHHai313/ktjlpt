@@ -1,4 +1,4 @@
-package kaito.jlpt.ktjlpt.dto.response;
+package kaito.jlpt.ktjlpt.dto.request;
 
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -8,9 +8,7 @@ import lombok.experimental.FieldDefaults;
 @AllArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class AuthenticationResponse {
-    UserResponse user;
+public class LogoutRequest {
     String accessToken;
     String refreshToken;
-    boolean authenticated;
 }

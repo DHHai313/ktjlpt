@@ -2,13 +2,13 @@ package kaito.jlpt.ktjlpt.entity;
 
 import jakarta.persistence.*;
 import kaito.jlpt.ktjlpt.enums.Provider;
-import kaito.jlpt.ktjlpt.enums.Role;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
+import java.util.Set;
 
 @Data
 @AllArgsConstructor
@@ -32,9 +32,8 @@ public class User {
     @Column(nullable = false)
     String password;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    Role role;
+    @ManyToMany(fetch = FetchType.EAGER)
+    Set<Role> roles;
 
     @Column(name = "full_name")
     String fullName;
@@ -47,7 +46,7 @@ public class User {
 
     @Column(name = "is_active")
     @Builder.Default
-    Boolean isActive=true;
+    Boolean active=true;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "provider")
