@@ -6,6 +6,7 @@ import lombok.experimental.FieldDefaults;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.Instant;
+import java.util.List;
 
 @Data
 @Builder
@@ -14,10 +15,9 @@ import java.time.Instant;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @Entity
 @Table(name = "exams")
-public class Exams {
+public class Exam {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-
     String id;
 
     @Column(name = "title")
@@ -34,12 +34,11 @@ public class Exams {
 
     @Column(name = "pass_score")
     Integer passScore;
-
-    @Column(name = "is_active")
-    @Builder.Default
-    boolean isActive=true;
+    @OneToMany(mappedBy = "exams", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    List<ExamSection> sections;
 
     @CreationTimestamp
     @Column(name = "created_at")
     Instant createdAt;
+
 }
