@@ -21,6 +21,14 @@ spring:
       host: localhost
       port: 6379
       timeout: 60000
+
+  outbound:
+    identity:
+      client-id: "355283986674-4tp4lc1nsppeks8kmjk4vkufg5m34g12.apps.googleusercontent.com"
+      client-secret: "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"
+      redirect_uri: "http://localhost:3000/authenticate"
+      grant_type: "authorization_code"
+
   jwt:
     signerKey: "jzzMoshSc+dhmxTHzpZ1+T+DH3SfPO7idcJ6JrlsIjZgB6zI8N2PvJr6g3XjiQIIbt60Tkq4Fi56K4LBnTuYkg=="
     # 15 minutes

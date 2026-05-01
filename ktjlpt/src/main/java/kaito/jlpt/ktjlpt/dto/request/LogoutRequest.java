@@ -1,5 +1,6 @@
 package kaito.jlpt.ktjlpt.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
@@ -9,6 +10,8 @@ import lombok.experimental.FieldDefaults;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class LogoutRequest {
+    @JsonProperty("access_token")
     String accessToken;
+    @JsonProperty("refresh_token")
     String refreshToken;
 }

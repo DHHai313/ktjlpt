@@ -16,10 +16,8 @@ import java.util.List;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class UserUpdateRequest {
 
-    @NotBlank
-    @Size(min = 2, max=100)
-    String fullName;
-    @Size(max=5)
+
+    @Size(max = 5)
     @Pattern(regexp = "N[1-5]")
     String currentLevel;
     @URL

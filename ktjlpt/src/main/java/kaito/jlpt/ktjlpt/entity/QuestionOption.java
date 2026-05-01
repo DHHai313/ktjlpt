@@ -20,7 +20,7 @@ public class QuestionOption {
     String id;
 
     @ManyToOne
-    @JoinColumn(name = "question_id", nullable = false)
+    @JoinColumn(name = "question", nullable = false)
     Question question;
 
     @Column(nullable = false)

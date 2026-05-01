@@ -37,7 +37,7 @@ public class Question {
     @Column(name = "question_order")
     private Integer questionOrder;
 
-    @OneToMany(mappedBy = "questions", fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "question", fetch = FetchType.LAZY)
     private List<QuestionOption> options;
 
     @CreationTimestamp

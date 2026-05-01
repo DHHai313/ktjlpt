@@ -6,15 +6,17 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
+@NoArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @JsonNaming(PropertyNamingStrategy.SnakeCaseStrategy.class)
-public class ExchangeTokenResponse {
-    String accessToken;
-    String expiresIn;
-    String refreshToken;
-    String scope;
-    String tokenType;
+public class OutboundUserResponse {
+    String id;
+    String email;
+    String name;
+    String givenName;
+    String avatarUrl;
+    Boolean active;
+
 }

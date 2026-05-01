@@ -3,15 +3,18 @@ package kaito.jlpt.ktjlpt;
 import jakarta.annotation.PostConstruct;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.openfeign.EnableFeignClients;
 
 import java.util.TimeZone;
 
 @SpringBootApplication
+@EnableFeignClients
 public class KtjlptApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(KtjlptApplication.class, args);
-	}
+    public static void main(String[] args) {
+        SpringApplication.run(KtjlptApplication.class, args);
+    }
+
     @PostConstruct
     public void init() {
         // Set múi giờ chuẩn mà PostgreSQL hiểu

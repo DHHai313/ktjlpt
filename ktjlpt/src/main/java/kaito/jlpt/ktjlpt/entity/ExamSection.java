@@ -30,7 +30,7 @@ public class ExamSection {
     Integer timeLimit;
     @Column(name = "audio_url")
     String audioUrl;
-    @OneToMany(mappedBy = "exam_sections", fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "examSection", fetch = FetchType.LAZY)
     List<QuestionGroup> questionGroups;
     @CreationTimestamp
     @Column(name = "created_at")

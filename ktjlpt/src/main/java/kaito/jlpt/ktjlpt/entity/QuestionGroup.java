@@ -21,7 +21,7 @@ public class QuestionGroup {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "section_id", nullable = false)
-    ExamSection examSections;
+    ExamSection examSection;
 
     @ManyToOne
     @JoinColumn(name = "passage_id")

@@ -20,7 +20,6 @@ import java.util.Set;
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-
     String id;
 
     @Column(nullable = false, unique = true)
@@ -28,15 +27,12 @@ public class User {
 
     @Column(nullable = false, unique = true)
     String username;
-
-    @Column(nullable = false)
+    @Column(nullable = true)
     String password;
 
     @ManyToMany(fetch = FetchType.EAGER)
     Set<Role> roles;
 
-    @Column(name = "full_name")
-    String fullName;
 
     @Column(name = "current_level", length = 5)
     String currentLevel;
@@ -46,13 +42,13 @@ public class User {
 
     @Column(name = "is_active")
     @Builder.Default
-    Boolean active=true;
+    Boolean active = true;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "provider")
-    Provider  provider;
+    Provider provider;
 
-    @CreationTimestamp
+
     @Column(name = "last_login_at")
     Instant lastLoginAt;
 

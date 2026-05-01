@@ -1,10 +1,8 @@
 package kaito.jlpt.ktjlpt.dto.response;
 
-import kaito.jlpt.ktjlpt.enums.Role;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
-import java.util.Set;
 
 @Data
 @AllArgsConstructor
@@ -15,7 +13,7 @@ public class UserResponse {
     String id;
     String username;
     String email;
-    String fullName;
+
     String currentLevel;
     String avatarUrl;
 

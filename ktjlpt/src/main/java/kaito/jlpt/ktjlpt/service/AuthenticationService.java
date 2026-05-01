@@ -5,18 +5,19 @@ import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
-import kaito.jlpt.ktjlpt.dto.request.AuthenticationRequest;
-import kaito.jlpt.ktjlpt.dto.request.IntrospectRequest;
-import kaito.jlpt.ktjlpt.dto.request.LogoutRequest;
-import kaito.jlpt.ktjlpt.dto.request.RefreshRequest;
+import kaito.jlpt.ktjlpt.dto.request.*;
 import kaito.jlpt.ktjlpt.dto.response.AuthenticationResponse;
 import kaito.jlpt.ktjlpt.dto.response.IntrospectResponse;
+import kaito.jlpt.ktjlpt.entity.Role;
 import kaito.jlpt.ktjlpt.entity.User;
 import kaito.jlpt.ktjlpt.enums.ErrorCode;
+import kaito.jlpt.ktjlpt.enums.Provider;
 import kaito.jlpt.ktjlpt.exception.AppException;
 import kaito.jlpt.ktjlpt.mapper.UserMapper;
 import kaito.jlpt.ktjlpt.repository.RoleRepository;
+import kaito.jlpt.ktjlpt.repository.httpclient.OutboundIdentityClient;
 import kaito.jlpt.ktjlpt.repository.UserRepository;
+import kaito.jlpt.ktjlpt.repository.httpclient.OutboundUserClient;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -26,30 +27,29 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
 import java.text.ParseException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Date;
-import java.util.StringJoiner;
-import java.util.UUID;
+import java.util.*;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class AuthenticationService {
-
+    OutboundUserClient outboundUserClient;
+    OutboundIdentityClient outboundIdentityClient;
     UserRepository userRepository;
     UserMapper userMapper;
-
+    RoleRepository roleRepository;
     RedisService redisService;
-
-
+    PasswordEncoder passwordEncoder;
     @NonFinal
     @Value("${spring.jwt.signerKey}")
-    protected  String SIGNER_KEY;
+    protected String SIGNER_KEY;
 
     @NonFinal
     @Value("${spring.jwt.access-exp}")
@@ -59,8 +59,23 @@ public class AuthenticationService {
     @Value("${spring.jwt.refresh-exp}")
     protected long REFRESH_EXPIRATION;
 
+    @NonFinal
+    @Value("${spring.outbound.identity.client-id}")
+    protected String CLIENT_ID;
 
-     public IntrospectResponse introspect(IntrospectRequest request) throws JOSEException, ParseException {
+    @NonFinal
+    @Value("${spring.outbound.identity.client-secret}")
+    protected String CLIENT_SECRET;
+
+    @NonFinal
+    @Value("${spring.outbound.identity.redirect_uri}")
+    protected String REDIRECT_URI;
+
+    @NonFinal
+    @Value("${spring.outbound.identity.grant_type}")
+    protected String GRANT_TYPE;
+
+    public IntrospectResponse introspect(IntrospectRequest request) throws JOSEException, ParseException {
         var token = request.getToken();
         boolean isValid = true;
 
@@ -73,8 +88,51 @@ public class AuthenticationService {
         return IntrospectResponse.builder().valid(isValid).build();
     }
 
+    @Transactional
+    public AuthenticationResponse outboundAuthentication(String code) {
+        var response = outboundIdentityClient.exchangeToken(ExchangeTokenRequest
+                .builder()
+                .code(code)
+                .clientId(CLIENT_ID)
+                .clientSecret(CLIENT_SECRET)
+                .redirectUri(REDIRECT_URI)
+                .grantType(GRANT_TYPE)
+                .build());
+
+        //Onboard User Google
+        var userInfor = outboundUserClient.getUserInfo("json", response.getAccessToken());
+        log.info("Outbound Authentication Response: {}", response);
+        log.info("User Infor: {}", userInfor);
+        // save user
+        Role userRole = roleRepository.findByName(kaito.jlpt.ktjlpt.enums.Role.USER.name())
+                .orElseThrow(() -> new RuntimeException("Role USER not found"));
+
+        Set<Role> roles = new HashSet<>();
+        roles.add(userRole);
+        //save if new user
+        var user = userRepository.findByEmail(userInfor.getEmail())
+                .map(existingUser -> {
+                    existingUser.setLastLoginAt(Instant.now());
+                    return userRepository.save(existingUser);
+                })
+                .orElseGet(
+                        () -> userRepository.save(User.builder()
+                                .username(userInfor.getName())
+                                .email(userInfor.getEmail())
+                                .active(userInfor.getActive())
+                                .avatarUrl(userInfor.getAvatarUrl())
+                                .provider(Provider.GOOGLE)
+                                .lastLoginAt(Instant.now())
+                                .password(passwordEncoder.encode(UUID.randomUUID().toString()))
+                                .roles(roles)
+                                .build()));
+        return AuthenticationResponse.builder()
+                .accessToken(response.getAccessToken())
+                .build();
+    }
+
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
-        PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
+
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new AppException(ErrorCode.UNAUTHENTICATED));
 
@@ -97,6 +155,8 @@ public class AuthenticationService {
         } catch (ParseException e) {
             throw new AppException(ErrorCode.INVALID_TOKEN);
         }
+        user.setLastLoginAt(Instant.now());
+        userRepository.save(user);
         return AuthenticationResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
@@ -149,6 +209,7 @@ public class AuthenticationService {
 //            log.info("Refresh token invalid or already removed");
 //        }
     }
+
     public AuthenticationResponse refreshToken(RefreshRequest request) throws ParseException, JOSEException {
         // 1. Verify chữ ký thủ công (không gọi qua verifyToken vì verifyToken giờ check Blacklist của Access Token)
         SignedJWT signedJWT = SignedJWT.parse(request.getToken());
@@ -197,7 +258,8 @@ public class AuthenticationService {
                 .refreshToken(newRefreshToken)
                 .build();
     }
-    private SignedJWT verifyToken(String token) throws JOSEException, ParseException {
+
+    public SignedJWT verifyToken(String token) throws JOSEException, ParseException {
         JWSVerifier verifier = new MACVerifier(SIGNER_KEY.getBytes());
         SignedJWT signedJWT = SignedJWT.parse(token);
 
@@ -217,7 +279,8 @@ public class AuthenticationService {
 
         return signedJWT;
     }
-    private String generateToken(User user,long validDuration){
+
+    private String generateToken(User user, long validDuration) {
         //header jwt
         JWSHeader header = new JWSHeader(JWSAlgorithm.HS512);
         //payload - data->claims
@@ -233,17 +296,18 @@ public class AuthenticationService {
                 .build();
         Payload payload = new Payload(jwtClaimsSet.toJSONObject());
         //JWS
-        JWSObject jwsObject = new JWSObject(header,payload);
+        JWSObject jwsObject = new JWSObject(header, payload);
         //sign
         try {
             jwsObject.sign(new MACSigner(SIGNER_KEY.getBytes()));
-            return  jwsObject.serialize();
+            return jwsObject.serialize();
         } catch (JOSEException e) {
-            log.error("Cannot generate Access Token",e);
+            log.error("Cannot generate Access Token", e);
             throw new RuntimeException(e);
         }
     }
-    private String generateRefreshToken(User user,long validDuration){
+
+    private String generateRefreshToken(User user, long validDuration) {
         //header jwt
         JWSHeader header = new JWSHeader(JWSAlgorithm.HS512);
         //payload - data->claims
@@ -259,23 +323,26 @@ public class AuthenticationService {
                 .build();
         Payload payload = new Payload(jwtClaimsSet.toJSONObject());
         //JWS
-        JWSObject jwsObject = new JWSObject(header,payload);
+        JWSObject jwsObject = new JWSObject(header, payload);
         //sign
         try {
             jwsObject.sign(new MACSigner(SIGNER_KEY.getBytes()));
-            return  jwsObject.serialize();
+            return jwsObject.serialize();
         } catch (JOSEException e) {
-            log.error("Cannot generate Refresh Token",e);
+            log.error("Cannot generate Refresh Token", e);
             throw new RuntimeException(e);
         }
     }
-    private String buildScope(User user){
+
+    private String buildScope(User user) {
         StringJoiner stringJoiner = new StringJoiner(" ");
         if (!CollectionUtils.isEmpty(user.getRoles())) {
             user.getRoles().forEach(role -> {
                 stringJoiner.add("ROLE_" + role.getName());
                 if (!CollectionUtils.isEmpty(role.getPermissions()))
-                role.getPermissions().forEach(permission -> {stringJoiner.add(permission.getName());});
+                    role.getPermissions().forEach(permission -> {
+                        stringJoiner.add(permission.getName());
+                    });
             });
 
         }
