@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import kaito.jlpt.ktjlpt.service.AuthenticationService;
 import kaito.jlpt.ktjlpt.service.RedisService;
 import lombok.Data;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,9 +20,9 @@ import java.util.List;
 
 @Component
 @RequiredArgsConstructor
-@Data
+
 public class JWTAuthenticationFilter extends OncePerRequestFilter {
-    private final AuthenticationService authenticationService;
+    //private final AuthenticationService authenticationService;
     private final RedisService redisService;
 
     @Override

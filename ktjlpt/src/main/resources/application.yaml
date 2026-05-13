@@ -7,9 +7,9 @@ spring:
     name: ktjlpt
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/jlpt?TimeZone=Asia/Ho_Chi_Minh
-    username: admin
-    password: kaito2004
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -24,13 +24,13 @@ spring:
 
   outbound:
     identity:
-      client-id: "355283986674-4tp4lc1nsppeks8kmjk4vkufg5m34g12.apps.googleusercontent.com"
-      client-secret: "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"
+      client-id: ${GOOGLE_CLIENT_ID}
+      client-secret: ${GOOGLE_CLIENT_SECRET}
       redirect_uri: "http://localhost:3000/authenticate"
       grant_type: "authorization_code"
 
   jwt:
-    signerKey: "jzzMoshSc+dhmxTHzpZ1+T+DH3SfPO7idcJ6JrlsIjZgB6zI8N2PvJr6g3XjiQIIbt60Tkq4Fi56K4LBnTuYkg=="
+    signerKey: ${JWT_SIGNER_KEY}
     # 15 minutes
     access-exp: 900
     # 7 days
