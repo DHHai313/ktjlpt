@@ -5,18 +5,19 @@ import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
-import kaito.jlpt.ktjlpt.dto.request.*;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import kaito.jlpt.ktjlpt.dto.request.ExchangeTokenRequest;
+import kaito.jlpt.ktjlpt.dto.request.IntrospectRequest;
 import kaito.jlpt.ktjlpt.dto.response.AuthenticationResponse;
 import kaito.jlpt.ktjlpt.dto.response.IntrospectResponse;
-import kaito.jlpt.ktjlpt.entity.Role;
 import kaito.jlpt.ktjlpt.entity.User;
 import kaito.jlpt.ktjlpt.enums.ErrorCode;
-import kaito.jlpt.ktjlpt.enums.Provider;
+import kaito.jlpt.ktjlpt.enums.Role;
 import kaito.jlpt.ktjlpt.exception.AppException;
-import kaito.jlpt.ktjlpt.mapper.UserMapper;
-import kaito.jlpt.ktjlpt.repository.RoleRepository;
-import kaito.jlpt.ktjlpt.repository.httpclient.OutboundIdentityClient;
 import kaito.jlpt.ktjlpt.repository.UserRepository;
+import kaito.jlpt.ktjlpt.repository.httpclient.OutboundIdentityClient;
 import kaito.jlpt.ktjlpt.repository.httpclient.OutboundUserClient;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -24,29 +25,32 @@ import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.CollectionUtils;
+import org.springframework.web.util.WebUtils;
 
 import java.text.ParseException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.Date;
+import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class AuthenticationService {
+
     OutboundUserClient outboundUserClient;
     OutboundIdentityClient outboundIdentityClient;
     UserRepository userRepository;
-    UserMapper userMapper;
-    RoleRepository roleRepository;
     RedisService redisService;
-    PasswordEncoder passwordEncoder;
+
+    static final String REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
+
     @NonFinal
     @Value("${spring.jwt.signerKey}")
     protected String SIGNER_KEY;
@@ -75,204 +79,278 @@ public class AuthenticationService {
     @Value("${spring.outbound.identity.grant_type}")
     protected String GRANT_TYPE;
 
+    // =====================================================================
+    //  GOOGLE OAUTH2 — Đăng nhập / Đăng ký duy nhất
+    // =====================================================================
+
+    /**
+     * Xử lý luồng Google OAuth2 Authorization Code.
+     * - Đổi code lấy Google Access Token.
+     * - Lấy thông tin user từ Google.
+     * - Nếu email chưa có trong DB → tạo user mới (role = USER, provider = GOOGLE).
+     * - Nếu email đã có → cập nhật lastLoginAt.
+     * - Tạo Access Token (ngắn hạn) trả về trong JSON body.
+     * - Tạo Refresh Token (dài hạn) set vào HttpOnly Cookie.
+     */
+    @Transactional
+    public AuthenticationResponse outboundAuthentication(String code, HttpServletResponse response) {
+        // 1. Đổi authorization code lấy Google token
+        var googleTokenResponse = outboundIdentityClient.exchangeToken(
+                ExchangeTokenRequest.builder()
+                        .code(code)
+                        .clientId(CLIENT_ID)
+                        .clientSecret(CLIENT_SECRET)
+                        .redirectUri(REDIRECT_URI)
+                        .grantType(GRANT_TYPE)
+                        .build()
+        );
+
+        // 2. Lấy thông tin user từ Google
+        var userInfo = outboundUserClient.getUserInfo("json", googleTokenResponse.getAccessToken());
+        log.info("Google OAuth2 - user info fetched: email={}, name={}", userInfo.getEmail(), userInfo.getName());
+
+        // 3. Tìm hoặc tạo user trong DB
+        User user = userRepository.findByEmail(userInfo.getEmail())
+                .map(existingUser -> {
+                    existingUser.setLastLoginAt(Instant.now());
+                    // Cập nhật avatar nếu Google có ảnh mới
+                    if (userInfo.getPicture() != null) {
+                        existingUser.setAvatarUrl(userInfo.getPicture());
+                    }
+                    return userRepository.save(existingUser);
+                })
+                .orElseGet(() -> {
+                    log.info("Google OAuth2 - new user, creating account for: {}", userInfo.getEmail());
+                    return userRepository.save(
+                            User.builder()
+                                    .email(userInfo.getEmail())
+                                    .userName(userInfo.getName())
+                                    .avatarUrl(userInfo.getPicture())
+                                    .role(Role.USER)
+                                    .isActive(true)
+
+                                    .lastLoginAt(Instant.now())
+                                   
+                                    .build()
+                    );
+                });
+
+        // 4. Tạo JWT của hệ thống
+        String accessToken = generateAccessToken(user);
+        String refreshToken = generateRefreshToken(user);
+
+        // 5. Lưu Refresh Token vào Redis Whitelist (theo JTI)
+        saveRefreshTokenToRedis(refreshToken);
+
+        // 6. Set Refresh Token vào HttpOnly Cookie
+        setRefreshTokenCookie(response, refreshToken);
+
+        return AuthenticationResponse.builder()
+                .accessToken(accessToken)
+                .build();
+    }
+
+    // =====================================================================
+    //  REFRESH TOKEN — Đọc từ HttpOnly Cookie
+    // =====================================================================
+
+    /**
+     * Cấp lại Access Token mới và rotate Refresh Token.
+     * - Đọc Refresh Token từ HttpOnly Cookie.
+     * - Validate chữ ký + hạn + type + Redis whitelist.
+     * - Xóa token cũ khỏi Redis.
+     * - Tạo bộ token mới: Access Token (JSON body) + Refresh Token (cookie mới).
+     */
+    public AuthenticationResponse refreshToken(HttpServletRequest request, HttpServletResponse response)
+            throws ParseException, JOSEException {
+
+        // 1. Đọc Refresh Token từ Cookie
+        String refreshToken = extractRefreshTokenFromCookie(request)
+                .orElseThrow(() -> new AppException(ErrorCode.UNAUTHENTICATED));
+
+        // 2. Verify chữ ký
+        SignedJWT signedJWT = SignedJWT.parse(refreshToken);
+        JWSVerifier verifier = new MACVerifier(SIGNER_KEY.getBytes());
+        if (!signedJWT.verify(verifier)) {
+            clearRefreshTokenCookie(response);
+            throw new AppException(ErrorCode.INVALID_TOKEN);
+        }
+
+        // 3. Kiểm tra hết hạn
+        Date expiryTime = signedJWT.getJWTClaimsSet().getExpirationTime();
+        if (expiryTime.before(new Date())) {
+            clearRefreshTokenCookie(response);
+            throw new AppException(ErrorCode.EXPIRED_TOKEN);
+        }
+
+        // 4. Kiểm tra type claim
+        String type = signedJWT.getJWTClaimsSet().getStringClaim("type");
+        if (!"refresh".equals(type)) {
+            clearRefreshTokenCookie(response);
+            throw new AppException(ErrorCode.INVALID_TOKEN);
+        }
+
+        String jti = signedJWT.getJWTClaimsSet().getJWTID();
+
+        // 5. Kiểm tra Redis Whitelist
+        String storedToken = redisService.getRefreshToken(jti);
+        if (storedToken == null || !storedToken.equals(refreshToken)) {
+            clearRefreshTokenCookie(response);
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
+
+        // 6. Xóa token cũ khỏi Redis (Token Rotation)
+        redisService.deleteRefreshToken(jti);
+
+        // 7. Tìm user theo email (subject)
+        String email = signedJWT.getJWTClaimsSet().getSubject();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.UNAUTHENTICATED));
+
+        // 8. Tạo bộ token mới
+        String newAccessToken = generateAccessToken(user);
+        String newRefreshToken = generateRefreshToken(user);
+
+        saveRefreshTokenToRedis(newRefreshToken);
+        setRefreshTokenCookie(response, newRefreshToken);
+
+        return AuthenticationResponse.builder()
+                .accessToken(newAccessToken)
+                .build();
+    }
+
+    // =====================================================================
+    //  LOGOUT — Blacklist Access Token + Clear Cookie + Remove from Redis
+    // =====================================================================
+
+    /**
+     * Logout:
+     * 1. Blacklist Access Token trong Redis (nếu còn hạn).
+     * 2. Đọc Refresh Token từ Cookie, xóa khỏi Redis Whitelist.
+     * 3. Clear HttpOnly Cookie.
+     */
+    public void logout(String accessToken, HttpServletRequest request, HttpServletResponse response)
+            throws ParseException, JOSEException {
+
+        // 1. Blacklist Access Token
+        try {
+            var accessJwt = verifyToken(accessToken);
+            String jti = accessJwt.getJWTClaimsSet().getJWTID();
+            Date expiryTime = accessJwt.getJWTClaimsSet().getExpirationTime();
+            long remainTimeMs = expiryTime.getTime() - System.currentTimeMillis();
+            if (remainTimeMs > 0) {
+                redisService.blacklistAccessToken(jti, remainTimeMs);
+            }
+        } catch (AppException e) {
+            log.info("Logout - Access token already expired or invalid, skipping blacklist");
+        }
+
+        // 2. Đọc Refresh Token từ Cookie và xóa khỏi Redis
+        extractRefreshTokenFromCookie(request).ifPresent(refreshToken -> {
+            try {
+                SignedJWT refreshJwt = SignedJWT.parse(refreshToken);
+                JWSVerifier verifier = new MACVerifier(SIGNER_KEY.getBytes());
+                if (refreshJwt.verify(verifier)) {
+                    String jti = refreshJwt.getJWTClaimsSet().getJWTID();
+                    redisService.deleteRefreshToken(jti);
+                    log.info("Logout - Refresh token removed from Redis: jti={}", jti);
+                }
+            } catch (Exception e) {
+                log.info("Logout - Refresh token invalid or already removed from Redis");
+            }
+        });
+
+        // 3. Clear Cookie
+        clearRefreshTokenCookie(response);
+    }
+
+    // =====================================================================
+    //  INTROSPECT
+    // =====================================================================
+
     public IntrospectResponse introspect(IntrospectRequest request) throws JOSEException, ParseException {
         var token = request.getToken();
         boolean isValid = true;
-
         try {
             verifyToken(token);
         } catch (AppException e) {
             isValid = false;
         }
-
         return IntrospectResponse.builder().valid(isValid).build();
     }
 
-    @Transactional
-    public AuthenticationResponse outboundAuthentication(String code) {
-        var response = outboundIdentityClient.exchangeToken(ExchangeTokenRequest
-                .builder()
-                .code(code)
-                .clientId(CLIENT_ID)
-                .clientSecret(CLIENT_SECRET)
-                .redirectUri(REDIRECT_URI)
-                .grantType(GRANT_TYPE)
-                .build());
+    // =====================================================================
+    //  TOKEN GENERATION
+    // =====================================================================
 
-        //Onboard User Google
-        var userInfor = outboundUserClient.getUserInfo("json", response.getAccessToken());
-        log.info("Outbound Authentication Response: {}", response);
-        log.info("User Infor: {}", userInfor);
-        // save user
-        Role userRole = roleRepository.findByName(kaito.jlpt.ktjlpt.enums.Role.USER.name())
-                .orElseThrow(() -> new RuntimeException("Role USER not found"));
-
-        Set<Role> roles = new HashSet<>();
-        roles.add(userRole);
-        //save if new user
-        var user = userRepository.findByEmail(userInfor.getEmail())
-                .map(existingUser -> {
-                    existingUser.setLastLoginAt(Instant.now());
-                    return userRepository.save(existingUser);
-                })
-                .orElseGet(
-                        () -> userRepository.save(User.builder()
-                                .username(userInfor.getName())
-                                .email(userInfor.getEmail())
-                                .active(userInfor.getActive())
-                                .avatarUrl(userInfor.getAvatarUrl())
-                                .provider(Provider.GOOGLE)
-                                .lastLoginAt(Instant.now())
-                                .password(passwordEncoder.encode(UUID.randomUUID().toString()))
-                                .roles(roles)
-                                .build()));
-        return AuthenticationResponse.builder()
-                .accessToken(response.getAccessToken())
+    /**
+     * Tạo Access Token ngắn hạn (15 phút).
+     * subject = user.email để phục vụ findByEmail() trong refreshToken().
+     */
+    private String generateAccessToken(User user) {
+        JWSHeader header = new JWSHeader(JWSAlgorithm.HS512);
+        JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+                .subject(user.getEmail())
+                .issuer("ktjlpt.com")
+                .issueTime(new Date())
+                .expirationTime(Date.from(Instant.now().plus(ACCESS_EXPIRATION, ChronoUnit.SECONDS)))
+                .jwtID(UUID.randomUUID().toString())
+                .claim("scope", "ROLE_" + user.getRole())
+                .claim("type", "access")
+                .claim("userId", user.getId())
                 .build();
+        return signJWT(header, claimsSet, "Access");
     }
 
-    public AuthenticationResponse authenticate(AuthenticationRequest request) {
-
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new AppException(ErrorCode.UNAUTHENTICATED));
-
-        boolean authenticated = passwordEncoder.matches(request.getPassword(), user.getPassword());
-
-        if (!authenticated)
-            throw new AppException(ErrorCode.UNAUTHENTICATED);
-
-        var accessToken = generateToken(user, ACCESS_EXPIRATION);
-        var refreshToken = generateRefreshToken(user, REFRESH_EXPIRATION);
-
-        // THÊM: Lưu Refresh Token vào Redis (tự động hủy theo thời gian REFRESH_EXPIRATION)
-        //redisService.saveRefreshToken(user.getUsername(), refreshToken, REFRESH_EXPIRATION);
-        try {
-            SignedJWT refreshJwt = SignedJWT.parse(refreshToken);
-            String refreshJti = refreshJwt.getJWTClaimsSet().getJWTID();
-
-            // Lưu refresh token theo jti
-            redisService.saveRefreshToken(refreshJti, refreshToken, REFRESH_EXPIRATION);
-        } catch (ParseException e) {
-            throw new AppException(ErrorCode.INVALID_TOKEN);
-        }
-        user.setLastLoginAt(Instant.now());
-        userRepository.save(user);
-        return AuthenticationResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
+    /**
+     * Tạo Refresh Token dài hạn (7 ngày).
+     */
+    private String generateRefreshToken(User user) {
+        JWSHeader header = new JWSHeader(JWSAlgorithm.HS512);
+        JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+                .subject(user.getEmail())
+                .issuer("ktjlpt.com")
+                .issueTime(new Date())
+                .expirationTime(Date.from(Instant.now().plus(REFRESH_EXPIRATION, ChronoUnit.SECONDS)))
+                .jwtID(UUID.randomUUID().toString())
+                .claim("type", "refresh")
                 .build();
+        return signJWT(header, claimsSet, "Refresh");
     }
 
-    public void logout(LogoutRequest request) throws ParseException, JOSEException {
-        // 1. Xử lý Access Token: Kiểm tra hạn, nếu còn thì ném vào Blacklist (Redis)
+    private String signJWT(JWSHeader header, JWTClaimsSet claimsSet, String tokenType) {
+        JWSObject jwsObject = new JWSObject(header, new Payload(claimsSet.toJSONObject()));
         try {
-            var accessJwt = verifyToken(request.getAccessToken());
-            String jit = accessJwt.getJWTClaimsSet().getJWTID();
-            Date expiryTime = accessJwt.getJWTClaimsSet().getExpirationTime();
-
-            long remainTimeMs = expiryTime.getTime() - System.currentTimeMillis();
-            if (remainTimeMs > 0) {
-                redisService.blacklistAccessToken(jit, remainTimeMs);
-            }
-        } catch (AppException e) {
-            log.info("Access token already expired or invalid");
+            jwsObject.sign(new MACSigner(SIGNER_KEY.getBytes()));
+            return jwsObject.serialize();
+        } catch (JOSEException e) {
+            log.error("Cannot generate {} Token", tokenType, e);
+            throw new RuntimeException("Cannot generate " + tokenType + " Token", e);
         }
-
-        // 2. Xử lý Refresh Token: Verify chữ ký và xóa khỏi Whitelist (Redis)
-        try {
-            SignedJWT refreshJwt = SignedJWT.parse(request.getRefreshToken());
-            JWSVerifier verifier = new MACVerifier(SIGNER_KEY.getBytes());
-
-            if (!refreshJwt.verify(verifier)) {
-                throw new AppException(ErrorCode.INVALID_TOKEN);
-            }
-
-            Date exp = refreshJwt.getJWTClaimsSet().getExpirationTime();
-            if (exp.before(new Date())) {
-                throw new AppException(ErrorCode.EXPIRED_TOKEN);
-            }
-
-            String jti = refreshJwt.getJWTClaimsSet().getJWTID();
-            redisService.deleteRefreshToken(jti);
-
-        } catch (Exception e) {
-            log.info("Refresh token invalid or expired");
-        }
-//        try {
-//            SignedJWT refreshJwt = SignedJWT.parse(request.getRefreshToken());
-//            JWSVerifier verifier = new MACVerifier(SIGNER_KEY.getBytes());
-//            if (refreshJwt.verify(verifier)) {
-//                String username = refreshJwt.getJWTClaimsSet().getSubject();
-//                redisService.deleteRefreshToken(username);
-//            }
-//        } catch (Exception e) {
-//            log.info("Refresh token invalid or already removed");
-//        }
     }
 
-    public AuthenticationResponse refreshToken(RefreshRequest request) throws ParseException, JOSEException {
-        // 1. Verify chữ ký thủ công (không gọi qua verifyToken vì verifyToken giờ check Blacklist của Access Token)
-        SignedJWT signedJWT = SignedJWT.parse(request.getToken());
-        JWSVerifier verifier = new MACVerifier(SIGNER_KEY.getBytes());
-        if (!signedJWT.verify(verifier)) {
-            throw new AppException(ErrorCode.UNAUTHENTICATED);
-        }
+    // =====================================================================
+    //  TOKEN VERIFICATION
+    // =====================================================================
 
-        // Kiểm tra Token hết hạn chưa
-        Date expiryTime = signedJWT.getJWTClaimsSet().getExpirationTime();
-        if (expiryTime.before(new Date())) {
-            throw new AppException(ErrorCode.UNAUTHENTICATED);
-        }
-
-        var type = signedJWT.getJWTClaimsSet().getStringClaim("type");
-        if (!"refresh".equals(type)) {
-            throw new AppException(ErrorCode.UNAUTHENTICATED);
-        }
-
-        var username = signedJWT.getJWTClaimsSet().getSubject();
-        String jti = signedJWT.getJWTClaimsSet().getJWTID();
-
-        // 2. KIỂM TRA TRONG REDIS: Token có tồn tại và khớp với Redis Whitelist không?
-        String storedToken = redisService.getRefreshToken(jti);
-        if (storedToken == null || !storedToken.equals(request.getToken())) {
-            throw new AppException(ErrorCode.UNAUTHENTICATED); // Bị xóa khỏi Redis rồi hoặc không khớp
-        }
-        // ===== QUAN TRỌNG: XÓA TOKEN CŨ =====
-        redisService.deleteRefreshToken(jti);
-
-        var user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new AppException(ErrorCode.UNAUTHENTICATED));
-
-        // 3. TOKEN ROTATION: Tạo bộ token mới
-        var newAccessToken = generateToken(user, ACCESS_EXPIRATION);
-        var newRefreshToken = generateRefreshToken(user, REFRESH_EXPIRATION);
-        // ===== LƯU BẰNG JTI MỚI =====
-        String newJti = SignedJWT.parse(newRefreshToken)
-                .getJWTClaimsSet()
-                .getJWTID();
-        // Lưu Refresh Token mới (ghi đè cái cũ)
-        redisService.saveRefreshToken(newJti, newRefreshToken, REFRESH_EXPIRATION);
-
-        return AuthenticationResponse.builder()
-                .accessToken(newAccessToken)
-                .refreshToken(newRefreshToken)
-                .build();
-    }
-
+    /**
+     * Verify Access Token: chữ ký, hạn, type="access", không bị blacklist trong Redis.
+     */
     public SignedJWT verifyToken(String token) throws JOSEException, ParseException {
         JWSVerifier verifier = new MACVerifier(SIGNER_KEY.getBytes());
         SignedJWT signedJWT = SignedJWT.parse(token);
 
+        boolean verified = signedJWT.verify(verifier);
         Date expiryTime = signedJWT.getJWTClaimsSet().getExpirationTime();
-        var verified = signedJWT.verify(verifier);
-        var type = signedJWT.getJWTClaimsSet().getStringClaim("type");
+        String type = signedJWT.getJWTClaimsSet().getStringClaim("type");
+
         if (!"access".equals(type)) {
             throw new AppException(ErrorCode.UNAUTHENTICATED);
         }
-        if (!(verified && expiryTime.after(new Date())))
+        if (!(verified && expiryTime.after(new Date()))) {
             throw new AppException(ErrorCode.UNAUTHENTICATED);
-
-        // THAY ĐỔI: Check Blacklist trên Redis thay vì SQL Database
+        }
+        // Kiểm tra Blacklist Redis
         if (redisService.isBlacklisted(signedJWT.getJWTClaimsSet().getJWTID())) {
             throw new AppException(ErrorCode.UNAUTHENTICATED);
         }
@@ -280,72 +358,61 @@ public class AuthenticationService {
         return signedJWT;
     }
 
-    private String generateToken(User user, long validDuration) {
-        //header jwt
-        JWSHeader header = new JWSHeader(JWSAlgorithm.HS512);
-        //payload - data->claims
-        JWTClaimsSet jwtClaimsSet = new JWTClaimsSet.Builder()
-                .subject(user.getUsername())//dai dien cho claims dang nhap
-                .issuer("ktjlpt.com")
-                .issueTime(new Date())
-                .expirationTime(new Date(
-                        Instant.now().plus(validDuration, ChronoUnit.SECONDS).toEpochMilli()))
-                .jwtID(UUID.randomUUID().toString())
-                .claim("scope", buildScope(user))
-                .claim("type", "access")
+    // =====================================================================
+    //  COOKIE HELPERS
+    // =====================================================================
+
+    /**
+     * Set Refresh Token vào HttpOnly Cookie (Secure=false cho dev local).
+     */
+    private void setRefreshTokenCookie(HttpServletResponse response, String refreshToken) {
+        ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, refreshToken)
+                .httpOnly(true)
+                .secure(false)          // Đặt true khi deploy production với HTTPS
+                .path("/ktjlpt/auth")   // Chỉ gửi cookie cho các request đến /ktjlpt/auth
+                .maxAge(Duration.ofSeconds(REFRESH_EXPIRATION))
+                .sameSite("Lax")        // Lax phù hợp cho redirect OAuth2
                 .build();
-        Payload payload = new Payload(jwtClaimsSet.toJSONObject());
-        //JWS
-        JWSObject jwsObject = new JWSObject(header, payload);
-        //sign
-        try {
-            jwsObject.sign(new MACSigner(SIGNER_KEY.getBytes()));
-            return jwsObject.serialize();
-        } catch (JOSEException e) {
-            log.error("Cannot generate Access Token", e);
-            throw new RuntimeException(e);
-        }
+        response.addHeader("Set-Cookie", cookie.toString());
     }
 
-    private String generateRefreshToken(User user, long validDuration) {
-        //header jwt
-        JWSHeader header = new JWSHeader(JWSAlgorithm.HS512);
-        //payload - data->claims
-        JWTClaimsSet jwtClaimsSet = new JWTClaimsSet.Builder()
-                .subject(user.getUsername())//dai dien cho claims dang nhap
-                .issuer("ktjlpt.com")
-                .issueTime(new Date())
-                .expirationTime(new Date(
-                        Instant.now().plus(validDuration, ChronoUnit.SECONDS).toEpochMilli()))
-                .jwtID(UUID.randomUUID().toString())
-                .claim("scope", buildScope(user))
-                .claim("type", "refresh")
+    /**
+     * Xóa Refresh Token Cookie (đặt Max-Age=0).
+     */
+    private void clearRefreshTokenCookie(HttpServletResponse response) {
+        ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, "")
+                .httpOnly(true)
+                .secure(false)
+                .path("/ktjlpt/auth")
+                .maxAge(0)
+                .sameSite("Lax")
                 .build();
-        Payload payload = new Payload(jwtClaimsSet.toJSONObject());
-        //JWS
-        JWSObject jwsObject = new JWSObject(header, payload);
-        //sign
-        try {
-            jwsObject.sign(new MACSigner(SIGNER_KEY.getBytes()));
-            return jwsObject.serialize();
-        } catch (JOSEException e) {
-            log.error("Cannot generate Refresh Token", e);
-            throw new RuntimeException(e);
-        }
+        response.addHeader("Set-Cookie", cookie.toString());
     }
 
-    private String buildScope(User user) {
-        StringJoiner stringJoiner = new StringJoiner(" ");
-        if (!CollectionUtils.isEmpty(user.getRoles())) {
-            user.getRoles().forEach(role -> {
-                stringJoiner.add("ROLE_" + role.getName());
-                if (!CollectionUtils.isEmpty(role.getPermissions()))
-                    role.getPermissions().forEach(permission -> {
-                        stringJoiner.add(permission.getName());
-                    });
-            });
-
+    /**
+     * Đọc Refresh Token từ Cookie trong request.
+     */
+    private Optional<String> extractRefreshTokenFromCookie(HttpServletRequest request) {
+        Cookie cookie = WebUtils.getCookie(request, REFRESH_TOKEN_COOKIE_NAME);
+        if (cookie == null || cookie.getValue() == null || cookie.getValue().isBlank()) {
+            return Optional.empty();
         }
-        return stringJoiner.toString();
+        return Optional.of(cookie.getValue());
+    }
+
+    // =====================================================================
+    //  REDIS HELPERS
+    // =====================================================================
+
+    private void saveRefreshTokenToRedis(String refreshToken) {
+        try {
+            SignedJWT jwt = SignedJWT.parse(refreshToken);
+            String jti = jwt.getJWTClaimsSet().getJWTID();
+            redisService.saveRefreshToken(jti, refreshToken, REFRESH_EXPIRATION);
+            log.debug("Refresh token saved to Redis: jti={}", jti);
+        } catch (ParseException e) {
+            throw new AppException(ErrorCode.INVALID_TOKEN);
+        }
     }
 }

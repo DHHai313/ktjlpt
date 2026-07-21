@@ -16,29 +16,33 @@ import java.util.List;
 @Entity
 @Table(name = "exams")
 public class Exam {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(length = 36)
     String id;
 
-    @Column(name = "title")
+    @Column(name = "title", nullable = false)
     String title;
 
-    @Column(name = "level")
+    @Column(name = "level", length = 10, nullable = false)
     String level;
 
-    @Column(name = "total_time")
+    @Column(name = "total_time", nullable = false)
     Integer totalTime;
 
     @Column(name = "total_score")
-    Integer totalScore;
+    @Builder.Default
+    Integer totalScore = 180;
 
     @Column(name = "pass_score")
-    Integer passScore;
-    @OneToMany(mappedBy = "exams", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @Builder.Default
+    Integer passScore = 90;
+
+    @OneToMany(mappedBy = "exam", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     List<ExamSection> sections;
 
     @CreationTimestamp
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     Instant createdAt;
-
 }

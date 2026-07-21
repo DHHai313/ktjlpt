@@ -1,7 +1,6 @@
 package kaito.jlpt.ktjlpt.dto.response;
 
-import com.fasterxml.jackson.databind.PropertyNamingStrategy;
-import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
@@ -10,13 +9,20 @@ import lombok.experimental.FieldDefaults;
 @NoArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
-@JsonNaming(PropertyNamingStrategy.SnakeCaseStrategy.class)
 public class OutboundUserResponse {
     String id;
     String email;
     String name;
-    String givenName;
-    String avatarUrl;
-    Boolean active;
 
+    @JsonProperty("given_name")
+    String givenName;
+
+    /**
+     * Google API trả về field tên là "picture", không phải "avatar_url".
+     */
+    @JsonProperty("picture")
+    String picture;
+
+    @JsonProperty("verified_email")
+    Boolean verifiedEmail;
 }

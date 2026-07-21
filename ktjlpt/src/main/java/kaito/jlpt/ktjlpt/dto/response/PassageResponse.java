@@ -3,16 +3,17 @@ package kaito.jlpt.ktjlpt.dto.response;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+import java.time.Instant;
+
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
+@AllArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class UserResponse {
+public class PassageResponse {
+
     String id;
-    String email;
-    String userName;
-    String role;
-    String avatarUrl;
-    Boolean isActive;
+    String content;
+    String imageUrl;
+    Instant createdAt;
 }

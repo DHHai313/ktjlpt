@@ -8,22 +8,30 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.Instant;
 
 @Data
+@Builder
 @AllArgsConstructor
 @NoArgsConstructor
-@Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @Entity
-@Table(name = "user_exam_attempts")
+@Table(
+        name = "user_exam_attempts",
+        indexes = {
+                @Index(name = "idx_attempt_user_id", columnList = "user_id"),
+                @Index(name = "idx_attempt_user_exam", columnList = "user_id, exam_id")
+        }
+)
 public class UserExamAttempts {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(length = 36)
     String id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     User user;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "exam_id", nullable = false)
     Exam exam;
 
@@ -31,12 +39,13 @@ public class UserExamAttempts {
     Integer totalScore;
 
     @CreationTimestamp
-    @Column(name = "started_at")
+    @Column(name = "started_at", updatable = false)
     Instant startedAt;
 
     @Column(name = "completed_at")
-    private Instant completedAt;
+    Instant completedAt;
 
-    @Column(name = "status")
-    String status;
+    @Column(name = "status", length = 20)
+    @Builder.Default
+    String status = "IN_PROGRESS";
 }

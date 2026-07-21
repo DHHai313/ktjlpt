@@ -1,18 +1,18 @@
 package kaito.jlpt.ktjlpt.dto.response;
 
-
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-
-import java.util.Set;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class RoleResponse {
-    String name;
-    String description;
-    Set<PermissionResponse> permissions;
+public class UserAnswerResponse {
+
+    String id;
+    String attemptId;
+    String questionId;
+    String selectedOptionId;
+    Boolean isCorrect;
 }

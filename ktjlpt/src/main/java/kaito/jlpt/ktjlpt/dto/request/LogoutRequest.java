@@ -10,8 +10,10 @@ import lombok.experimental.FieldDefaults;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class LogoutRequest {
+    /**
+     * Access Token được gửi lên trong body để đưa vào blacklist Redis.
+     * Refresh Token được đọc từ HttpOnly Cookie — không cần gửi trong body.
+     */
     @JsonProperty("access_token")
     String accessToken;
-    @JsonProperty("refresh_token")
-    String refreshToken;
 }

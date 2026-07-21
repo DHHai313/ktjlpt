@@ -3,9 +3,7 @@ package kaito.jlpt.ktjlpt.config;
 import com.nimbusds.jose.JOSEException;
 import kaito.jlpt.ktjlpt.dto.request.IntrospectRequest;
 import kaito.jlpt.ktjlpt.service.AuthenticationService;
-import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
-import lombok.experimental.FieldDefaults;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -18,21 +16,32 @@ import javax.crypto.spec.SecretKeySpec;
 import java.text.ParseException;
 import java.util.Objects;
 
+/**
+ * Custom JWT Decoder dùng để:
+ * 1. Introspect token (verify chữ ký + hạn + type=access + không bị blacklist Redis).
+ * 2. Delegate decode thực sự cho NimbusJwtDecoder chuẩn của Spring.
+ *
+ * Được sử dụng bởi SecurityConfig trong cấu hình oauth2ResourceServer.
+ */
 @Component
 @RequiredArgsConstructor
 public class CustomJwtDecoder implements JwtDecoder {
+
     @Value("${spring.jwt.signerKey}")
     private String signerKey;
 
     private final AuthenticationService authenticationService;
+
     private NimbusJwtDecoder nimbusJwtDecoder = null;
+
     @Override
     public Jwt decode(String token) throws JwtException {
         try {
             var response = authenticationService.introspect(
                     IntrospectRequest.builder().token(token).build());
-
-            if (!response.isValid()) throw new JwtException("Token invalid");
+            if (!response.isValid()) {
+                throw new JwtException("Token invalid or blacklisted");
+            }
         } catch (JOSEException | ParseException e) {
             throw new JwtException(e.getMessage());
         }

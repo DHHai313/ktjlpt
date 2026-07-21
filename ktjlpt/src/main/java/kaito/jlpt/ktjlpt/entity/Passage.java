@@ -15,17 +15,19 @@ import java.time.Instant;
 @Entity
 @Table(name = "passages")
 public class Passage {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(length = 36)
     String id;
 
-    @Column(name = "content")
+    @Column(columnDefinition = "TEXT")
     String content;
 
-    @Column(name = "image_url")
+    @Column(name = "image_url", length = 500)
     String imageUrl;
 
     @CreationTimestamp
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     Instant createdAt;
 }

@@ -14,7 +14,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: create
     show-sql: true
   data:
     redis:
@@ -26,7 +26,7 @@ spring:
     identity:
       client-id: ${GOOGLE_CLIENT_ID}
       client-secret: ${GOOGLE_CLIENT_SECRET}
-      redirect_uri: "http://localhost:3000/authenticate"
+      redirect_uri: "http://localhost:5173/authenticate"
       grant_type: "authorization_code"
 
   jwt:

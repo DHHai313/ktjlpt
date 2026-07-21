@@ -1,14 +1,13 @@
 package kaito.jlpt.ktjlpt.entity;
 
 import jakarta.persistence.*;
-import kaito.jlpt.ktjlpt.enums.Provider;
+import kaito.jlpt.ktjlpt.enums.Role;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
-import java.util.Set;
 
 @Data
 @AllArgsConstructor
@@ -18,6 +17,7 @@ import java.util.Set;
 @Entity
 @Table(name = "users")
 public class User {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     String id;
@@ -25,38 +25,32 @@ public class User {
     @Column(nullable = false, unique = true)
     String email;
 
-    @Column(nullable = false, unique = true)
-    String username;
-    @Column(nullable = true)
-    String password;
-
-    @ManyToMany(fetch = FetchType.EAGER)
-    Set<Role> roles;
+    @Column(name = "user_name", length = 100)
+    String userName;
 
 
-    @Column(name = "current_level", length = 5)
-    String currentLevel;
+    /**
+     * Role đơn giản: "USER" hoặc "ADMIN".
+     */
+    @Column(name = "role", length = 20)
+    Role role;
 
     @Column(name = "avatar_url", length = 512)
     String avatarUrl;
 
     @Column(name = "is_active")
     @Builder.Default
-    Boolean active = true;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "provider")
-    Provider provider;
+    Boolean isActive = true;
 
 
     @Column(name = "last_login_at")
     Instant lastLoginAt;
 
-    @CreationTimestamp // Tự động điền thời gian khi tạo bản ghi
+    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     Instant createdAt;
 
-    @UpdateTimestamp // Tự động cập nhật thời gian khi sửa bản ghi
+    @UpdateTimestamp
     @Column(name = "updated_at")
     Instant updatedAt;
 }

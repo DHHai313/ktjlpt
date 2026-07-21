@@ -18,6 +18,16 @@ public enum ErrorCode {
     INVALID_TOKEN(1008,"Invalid token",HttpStatus.UNAUTHORIZED),
     EXPIRED_TOKEN(1009,"Token Expired",HttpStatus.UNAUTHORIZED),
 
+    // --- Exam domain errors ---
+    EXAM_NOT_FOUND(2001, "Exam not found", HttpStatus.NOT_FOUND),
+    EXAM_SECTION_NOT_FOUND(2002, "Exam section not found", HttpStatus.NOT_FOUND),
+    QUESTION_GROUP_NOT_FOUND(2003, "Question group not found", HttpStatus.NOT_FOUND),
+    QUESTION_NOT_FOUND(2004, "Question not found", HttpStatus.NOT_FOUND),
+    QUESTION_OPTION_NOT_FOUND(2005, "Question option not found", HttpStatus.NOT_FOUND),
+    PASSAGE_NOT_FOUND(2006, "Passage not found", HttpStatus.NOT_FOUND),
+    ATTEMPT_NOT_FOUND(2007, "Exam attempt not found", HttpStatus.NOT_FOUND),
+    ATTEMPT_ALREADY_COMPLETED(2008, "Exam attempt already completed", HttpStatus.BAD_REQUEST),
+    DUPLICATE_ANSWER(2009, "Answer already submitted for this question", HttpStatus.BAD_REQUEST),
 
     ;
 

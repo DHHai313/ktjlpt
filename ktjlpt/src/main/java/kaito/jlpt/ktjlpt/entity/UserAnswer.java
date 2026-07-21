@@ -10,25 +10,35 @@ import lombok.experimental.FieldDefaults;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @Entity
-@Table(name = "user_answers")
+@Table(
+        name = "user_answers",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_attempt_question",
+                columnNames = {"attempt_id", "question_id"}
+        ),
+        indexes = {
+                @Index(name = "idx_answer_attempt_id", columnList = "attempt_id")
+        }
+)
 public class UserAnswer {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(length = 36)
     String id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "attempt_id", nullable = false)
     UserExamAttempts attempt;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "question_id", nullable = false)
     Question question;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "selected_option_id")
-    private QuestionOption selectedOption;
+    QuestionOption selectedOption;
 
     @Column(name = "is_correct")
-    private Boolean isCorrect;
-
+    Boolean isCorrect;
 }
