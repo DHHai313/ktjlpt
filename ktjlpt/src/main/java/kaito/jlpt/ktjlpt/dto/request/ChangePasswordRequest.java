@@ -1,8 +1,6 @@
 package kaito.jlpt.ktjlpt.dto.request;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -12,21 +10,14 @@ import lombok.experimental.FieldDefaults;
 @AllArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class UserCreationRequest {
-    @NotBlank
-    @Email
-    String email;
-
-    @NotBlank
-    @Size(min = 3, max = 30, message = "USERNAME_INVALID")
-    String username;
-
+public class ChangePasswordRequest {
     @NotBlank
     @Size(min = 6, max = 30, message = "PASSWORD_INVALID")
-    String password;
-
-    @Size(max = 5)
-    @Pattern(regexp = "N[1-5]")
-    String currentLevel;
-
+    String oldPassword;
+    @NotBlank
+    @Size(min = 6, max = 30, message = "PASSWORD_INVALID")
+    String newPassword;
+    @NotBlank
+    @Size(min = 6, max = 30, message = "PASSWORD_INVALID")
+    String confirmPassword;
 }

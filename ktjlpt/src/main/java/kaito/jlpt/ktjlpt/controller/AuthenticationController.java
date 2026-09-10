@@ -1,10 +1,7 @@
 package kaito.jlpt.ktjlpt.controller;
 
 import com.nimbusds.jose.JOSEException;
-import kaito.jlpt.ktjlpt.dto.request.AuthenticationRequest;
-import kaito.jlpt.ktjlpt.dto.request.IntrospectRequest;
-import kaito.jlpt.ktjlpt.dto.request.LogoutRequest;
-import kaito.jlpt.ktjlpt.dto.request.RefreshRequest;
+import kaito.jlpt.ktjlpt.dto.request.*;
 import kaito.jlpt.ktjlpt.dto.response.ApiResponse;
 import kaito.jlpt.ktjlpt.dto.response.AuthenticationResponse;
 import kaito.jlpt.ktjlpt.dto.response.IntrospectResponse;
@@ -66,5 +63,12 @@ public class AuthenticationController {
                 .result(result)
                 .message("Token refreshed successfully")
                 .build();
+    }
+
+    @PostMapping("/change-password")
+    public ApiResponse<Void> changePassword(@RequestBody ChangePasswordRequest request)
+            throws ParseException, JOSEException {
+        authenticationService.changePassword(request);
+        return ApiResponse.<Void>builder().message("Change password successfully").build();
     }
 }
