@@ -28,12 +28,14 @@ public class User {
 
     @Column(nullable = false, unique = true)
     String username;
+    
     @Column(nullable = true)
     String password;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Role role;
+    Role role;
+
     @Column(name = "current_level", length = 5)
     String currentLevel;
 
