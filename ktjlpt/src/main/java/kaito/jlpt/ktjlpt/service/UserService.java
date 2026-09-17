@@ -31,13 +31,13 @@ import java.util.List;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class UserService {
 
-//    @Autowired
-     UserRepository userRepository;
-//    @Autowired
-     UserMapper userMapper;
+    //    @Autowired
+    UserRepository userRepository;
+    //    @Autowired
+    UserMapper userMapper;
 
 
-    public UserResponse createUser(UserCreationRequest request){
+    public UserResponse createUser(UserCreationRequest request) {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new AppException(ErrorCode.USER_EXISTED);
         } else if (userRepository.existsByEmail(request.getEmail())) {
@@ -47,38 +47,43 @@ public class UserService {
         User user = userMapper.toUser(request);
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-             //user.setRole(Role.USER);
-             user.setActive(true);
-             user.setProvider(Provider.LOCAL);
+        user.setRole(Role.USER);
+        user.setActive(true);
+        user.setProvider(Provider.LOCAL);
 
         return userMapper.toUserResponse(userRepository.save(user));
     }
+
     //@PreAuthorize("hasAuthority('VIEW')")
     @PreAuthorize("hasRole('ADMIN')")
-    public List<UserResponse> getUsers(){
+    public List<UserResponse> getUsers() {
         log.info("getUsers");
         List<UserResponse> userResponse = userMapper.toUserResponse(userRepository.findAll());
         return userResponse;
     }
+
     @PostAuthorize("returnObject.username == authentication.name")
     public UserResponse getUser(String userId) {
-        return userMapper.toUserResponse(userRepository.findById(userId).orElseThrow(()-> new RuntimeException("User not found")));
+        return userMapper.toUserResponse(userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found")));
     }
-    public UserResponse updateUser(String userId,UserUpdateRequest request){
-        User user = userRepository.findById(userId).orElseThrow(()-> new RuntimeException("User not found"));
+
+    public UserResponse updateUser(String userId, UserUpdateRequest request) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
 //        user.setFullName(request.getFullName());
 //        user.setCurrentLevel(request.getCurrentLevel());
 //        user.setAvatarUrl(request.getAvatarUrl());
-        userMapper.updateUser(user,request);
+        userMapper.updateUser(user, request);
         return userMapper.toUserResponse(userRepository.save(user));
     }
+
     public void deleteUser(String userId) {
         userRepository.deleteById(userId);
     }
+
     public UserResponse getMyInfo() {
         var context = SecurityContextHolder.getContext();
         String name = context.getAuthentication().getName();
-         User user = userRepository.findByUsername(name).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-         return userMapper.toUserResponse(user);
+        User user = userRepository.findByUsername(name).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        return userMapper.toUserResponse(user);
     }
 }

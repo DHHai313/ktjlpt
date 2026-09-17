@@ -2,6 +2,7 @@ package kaito.jlpt.ktjlpt.entity;
 
 import jakarta.persistence.*;
 import kaito.jlpt.ktjlpt.enums.Provider;
+import kaito.jlpt.ktjlpt.enums.Role;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.hibernate.annotations.CreationTimestamp;
@@ -30,10 +31,9 @@ public class User {
     @Column(nullable = true)
     String password;
 
-    @ManyToMany(fetch = FetchType.EAGER)
-    Set<Role> roles;
-
-
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Role role;
     @Column(name = "current_level", length = 5)
     String currentLevel;
 

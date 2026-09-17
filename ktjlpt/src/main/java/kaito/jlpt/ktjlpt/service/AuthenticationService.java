@@ -8,13 +8,12 @@ import com.nimbusds.jwt.SignedJWT;
 import kaito.jlpt.ktjlpt.dto.request.*;
 import kaito.jlpt.ktjlpt.dto.response.AuthenticationResponse;
 import kaito.jlpt.ktjlpt.dto.response.IntrospectResponse;
-import kaito.jlpt.ktjlpt.entity.Role;
 import kaito.jlpt.ktjlpt.entity.User;
 import kaito.jlpt.ktjlpt.enums.ErrorCode;
 import kaito.jlpt.ktjlpt.enums.Provider;
+import kaito.jlpt.ktjlpt.enums.Role;
 import kaito.jlpt.ktjlpt.exception.AppException;
 import kaito.jlpt.ktjlpt.mapper.UserMapper;
-import kaito.jlpt.ktjlpt.repository.RoleRepository;
 import kaito.jlpt.ktjlpt.repository.httpclient.OutboundIdentityClient;
 import kaito.jlpt.ktjlpt.repository.UserRepository;
 import kaito.jlpt.ktjlpt.repository.httpclient.OutboundUserClient;
@@ -26,7 +25,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,7 +44,6 @@ public class AuthenticationService {
     OutboundIdentityClient outboundIdentityClient;
     UserRepository userRepository;
     UserMapper userMapper;
-    RoleRepository roleRepository;
     RedisService redisService;
     PasswordEncoder passwordEncoder;
     @NonFinal
@@ -105,12 +102,12 @@ public class AuthenticationService {
         var userInfor = outboundUserClient.getUserInfo("json", response.getAccessToken());
         log.info("Outbound Authentication Response: {}", response);
         log.info("User Infor: {}", userInfor);
-        // save user
-        Role userRole = roleRepository.findByName(kaito.jlpt.ktjlpt.enums.Role.USER.name())
-                .orElseThrow(() -> new RuntimeException("Role USER not found"));
-
-        Set<Role> roles = new HashSet<>();
-        roles.add(userRole);
+//        // save user
+//        Role userRole = roleRepository.findByName(kaito.jlpt.ktjlpt.enums.Role.USER.name())
+//                .orElseThrow(() -> new RuntimeException("Role USER not found"));
+//
+//        Set<Role> roles = new HashSet<>();
+//        roles.add(userRole);
         //save if new user
         var user = userRepository.findByEmail(userInfor.getEmail())
                 .map(existingUser -> {
@@ -126,7 +123,7 @@ public class AuthenticationService {
                                 .provider(Provider.GOOGLE)
                                 .lastLoginAt(Instant.now())
                                 .password(passwordEncoder.encode(UUID.randomUUID().toString()))
-                                .roles(roles)
+                                .role(Role.USER)
                                 .build()));
         return AuthenticationResponse.builder()
                 .accessToken(response.getAccessToken())
@@ -336,19 +333,26 @@ public class AuthenticationService {
         }
     }
 
+    //    private String buildScope(User user) {
+//        StringJoiner stringJoiner = new StringJoiner(" ");
+//        if (!CollectionUtils.isEmpty(user.getRoles())) {
+//            user.getRoles().forEach(role -> {
+//                stringJoiner.add("ROLE_" + role.getName());
+//                if (!CollectionUtils.isEmpty(role.getPermissions()))
+//                    role.getPermissions().forEach(permission -> {
+//                        stringJoiner.add(permission.getName());
+//                    });
+//            });
+//
+//        }
+//        return stringJoiner.toString();
+//    }
     private String buildScope(User user) {
-        StringJoiner stringJoiner = new StringJoiner(" ");
-        if (!CollectionUtils.isEmpty(user.getRoles())) {
-            user.getRoles().forEach(role -> {
-                stringJoiner.add("ROLE_" + role.getName());
-                if (!CollectionUtils.isEmpty(role.getPermissions()))
-                    role.getPermissions().forEach(permission -> {
-                        stringJoiner.add(permission.getName());
-                    });
-            });
-
+        if (user.getRole() == null) {
+            return "";
         }
-        return stringJoiner.toString();
+
+        return "ROLE_" + user.getRole().name();
     }
 
     public void changePassword(ChangePasswordRequest request) {
