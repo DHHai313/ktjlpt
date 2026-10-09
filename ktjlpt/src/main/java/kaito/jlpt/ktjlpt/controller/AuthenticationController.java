@@ -1,11 +1,13 @@
 package kaito.jlpt.ktjlpt.controller;
 
 import com.nimbusds.jose.JOSEException;
+import jakarta.validation.Valid;
 import kaito.jlpt.ktjlpt.dto.request.*;
 import kaito.jlpt.ktjlpt.dto.response.ApiResponse;
 import kaito.jlpt.ktjlpt.dto.response.AuthenticationResponse;
 import kaito.jlpt.ktjlpt.dto.response.IntrospectResponse;
 import kaito.jlpt.ktjlpt.service.AuthenticationService;
+import kaito.jlpt.ktjlpt.service.EmailService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -70,5 +72,17 @@ public class AuthenticationController {
             throws ParseException, JOSEException {
         authenticationService.changePassword(request);
         return ApiResponse.<Void>builder().message("Change password successfully").build();
+    }
+
+    @PostMapping("/verify-email")
+    public ApiResponse<Void> verifyEmail(@Valid @RequestBody VerifyOtpRequest request) {
+        authenticationService.verifyEmail(request);
+        return ApiResponse.<Void>builder().message("Verify email successfully").build();
+    }
+
+    @PostMapping("/resend-otp")
+    public ApiResponse<Void> resendOtp(@Valid @RequestBody ResendOtpRequest request) {
+        authenticationService.resendOtp(request);
+        return ApiResponse.<Void>builder().message("Resend otp successfully").build();
     }
 }

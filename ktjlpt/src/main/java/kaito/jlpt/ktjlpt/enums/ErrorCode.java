@@ -21,6 +21,11 @@ public enum ErrorCode {
     PASSWORD_NOT_MATCH(1010, "Password Do Not Match", HttpStatus.UNAUTHORIZED),
     INCORRECT_PASSWORD(1011, "OldPassword incorret ", HttpStatus.UNAUTHORIZED),
 
+    // === Email OTP Verification ===
+    EMAIL_NOT_VERIFIED(1012, "Email has not been verified", HttpStatus.FORBIDDEN),
+    INVALID_OTP(1013, "Invalid or expired OTP", HttpStatus.BAD_REQUEST),
+    OTP_COOLDOWN(1014, "Please wait before requesting a new OTP", HttpStatus.TOO_MANY_REQUESTS),
+    EMAIL_ALREADY_VERIFIED(1015, "Email is already verified", HttpStatus.BAD_REQUEST),
 
     ;
 

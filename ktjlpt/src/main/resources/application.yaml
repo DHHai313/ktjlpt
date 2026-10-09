@@ -14,7 +14,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: update
     show-sql: true
   data:
     redis:
@@ -36,3 +36,25 @@ spring:
     # 7 days
     refresh-exp: 604800
 
+  mail:
+    host: smtp-relay.brevo.com
+    port: 587
+    username: ${BREVO_SMTP_LOGIN}
+    password: ${BREVO_SMTP_KEY}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+app:
+  mail:
+    from: dinhhonghai3132004@gmail.com        # phải là sender đã verify trên Brevo
+    from-name: "Kaito_Dev"
+  frontend:
+    base-url: http://localhost:5173     # đổi sang domain FE thật khi deploy
+  verification:
+    otp-expiry-minutes: 5

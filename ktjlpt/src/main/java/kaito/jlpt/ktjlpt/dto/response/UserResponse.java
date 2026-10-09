@@ -18,4 +18,5 @@ public class UserResponse {
     String avatarUrl;
 
     Boolean active;
+    Boolean verifyEmail;
 }

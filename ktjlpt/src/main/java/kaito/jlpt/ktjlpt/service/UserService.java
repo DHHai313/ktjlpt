@@ -13,8 +13,10 @@ import kaito.jlpt.ktjlpt.repository.UserRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PostAuthorize;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -36,6 +38,15 @@ public class UserService {
     //    @Autowired
     UserMapper userMapper;
 
+    // Inject service gửi email OTP
+    EmailService emailService;
+    // Inject service quản lý OTP trong Redis
+    RedisService redisService;
+
+    // Thời gian hết hạn OTP (phút), đọc từ application.yaml
+    @NonFinal
+    @Value("${app.verification.otp-expiry-minutes}")
+    long otpExpiryMinutes;
 
     public UserResponse createUser(UserCreationRequest request) {
         if (userRepository.existsByUsername(request.getUsername())) {
@@ -50,11 +61,22 @@ public class UserService {
         user.setRole(Role.USER);
         user.setActive(true);
         user.setProvider(Provider.LOCAL);
+        user.setEmailVerified(false); // Mặc định chưa xác thực email
 
-        return userMapper.toUserResponse(userRepository.save(user));
+        UserResponse response = userMapper.toUserResponse(userRepository.save(user));
+
+        // === Sinh OTP → Lưu Redis → Gửi email ===
+        // 1. Sinh mã OTP 6 số (SecureRandom)
+        String otp = emailService.generateOtp();
+        // 2. Lưu OTP vào Redis với TTL = otpExpiryMinutes (5 phút)
+        redisService.saveOtp(request.getEmail(), otp, otpExpiryMinutes);
+        // 3. Gửi email OTP bất đồng bộ (@Async) — không block response
+        emailService.sendOtpEmail(request.getEmail(), otp);
+
+        return response;
     }
 
-    //@PreAuthorize("hasAuthority('VIEW')")
+   
     @PreAuthorize("hasRole('ADMIN')")
     public List<UserResponse> getUsers() {
         log.info("getUsers");

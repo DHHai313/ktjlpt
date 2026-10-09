@@ -28,7 +28,7 @@ public class User {
 
     @Column(nullable = false, unique = true)
     String username;
-    
+
     @Column(nullable = true)
     String password;
 
@@ -45,6 +45,9 @@ public class User {
     @Column(name = "is_active")
     @Builder.Default
     Boolean active = true;
+
+    @Column(name = "email_verified")
+    Boolean emailVerified = false;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "provider")

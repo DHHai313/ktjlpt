@@ -34,9 +34,13 @@ import java.util.List;
 public class SecurityConfig {
     private final JWTAuthenticationFilter jwtAuthenticationFilter;
     private final PasswordEncoder passwordEncoder;
+    // Các endpoint không cần authentication (public access)
     private static final String[] PUBLIC_ENDPOINTS = {"/auth/login"
             , "/auth/introspect", "/users", "/auth/change-password", "/swagger-ui/**",
-            "/v3/api-docs/**", "/permissions", "/roles", "/auth/outbound/authentication", "/auth/outbound/**"};
+            "/v3/api-docs/**", "/permissions", "/roles", "/auth/outbound/authentication", "/auth/outbound/**",
+            "/auth/verify-email",   // Xác thực OTP email — user chưa login vẫn cần truy cập
+            "/auth/resend-otp"      // Gửi lại OTP — user chưa login vẫn cần truy cập
+    };
 
 
     private final CustomJwtDecoder customJwtDecoder;

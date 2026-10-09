@@ -46,6 +46,14 @@ public class AuthenticationService {
     UserMapper userMapper;
     RedisService redisService;
     PasswordEncoder passwordEncoder;
+
+    // Service gửi email OTP qua Brevo
+    EmailService emailService;
+
+    // Thời gian hết hạn OTP (phút), đọc từ application.yaml
+    @NonFinal
+    @Value("${app.verification.otp-expiry-minutes}")
+    long otpExpiryMinutes;
     @NonFinal
     @Value("${spring.jwt.signerKey}")
     protected String SIGNER_KEY;
@@ -134,6 +142,13 @@ public class AuthenticationService {
 
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new AppException(ErrorCode.UNAUTHENTICATED));
+
+        // Chặn login nếu email chưa xác thực (chỉ áp dụng cho user LOCAL,
+        // user Google OAuth không cần vì email đã được Google verify sẵn)
+        if (Provider.LOCAL.equals(user.getProvider())
+                && !Boolean.TRUE.equals(user.getEmailVerified())) {
+            throw new AppException(ErrorCode.EMAIL_NOT_VERIFIED);
+        }
 
         boolean authenticated = passwordEncoder.matches(request.getPassword(), user.getPassword());
 
@@ -369,5 +384,81 @@ public class AuthenticationService {
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
 
+    }
+
+    // ======================== Email OTP Verification ========================
+
+    /**
+     * Xác thực email bằng mã OTP 6 số.
+     *
+     * Flow:
+     * 1. Tìm user theo email
+     * 2. Kiểm tra email đã verify chưa (tránh verify lại)
+     * 3. Lấy OTP từ Redis và so sánh với OTP user nhập
+     * 4. Nếu đúng → cập nhật emailVerified = true, xoá OTP khỏi Redis
+     *
+     * @param request Chứa email và mã OTP 6 số
+     */
+    public void verifyEmail(VerifyOtpRequest request) {
+        // 1. Tìm user theo email
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        // 2. Kiểm tra email đã được verify trước đó chưa
+        if (Boolean.TRUE.equals(user.getEmailVerified())) {
+            throw new AppException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        }
+
+        // 3. Lấy OTP từ Redis — null nghĩa là OTP hết hạn hoặc chưa gửi
+        String storedOtp = redisService.getOtp(request.getEmail());
+        if (storedOtp == null || !storedOtp.equals(request.getOtp())) {
+            throw new AppException(ErrorCode.INVALID_OTP);
+        }
+
+        // 4. OTP đúng → cập nhật trạng thái email đã xác thực
+        user.setEmailVerified(true);
+        userRepository.save(user);
+
+        // 5. Xoá OTP khỏi Redis (không cho dùng lại OTP cũ)
+        redisService.deleteOtp(request.getEmail());
+    }
+
+    /**
+     * Gửi lại mã OTP mới đến email.
+     *
+     * Flow:
+     * 1. Tìm user theo email
+     * 2. Kiểm tra email chưa verify (đã verify thì không cần OTP)
+     * 3. Kiểm tra cooldown 60s (chống spam gửi liên tục)
+     * 4. Sinh OTP mới → lưu Redis → set cooldown → gửi email
+     *
+     * @param request Chứa email cần gửi lại OTP
+     */
+    public void resendOtp(ResendOtpRequest request) {
+        // 1. Tìm user theo email
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        // 2. Đã verify rồi thì không cần gửi OTP nữa
+        if (Boolean.TRUE.equals(user.getEmailVerified())) {
+            throw new AppException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        }
+
+        // 3. Kiểm tra cooldown — mỗi lần gửi phải cách nhau ít nhất 60 giây
+        if (redisService.isCooldownActive(request.getEmail())) {
+            throw new AppException(ErrorCode.OTP_COOLDOWN);
+        }
+
+        // 4. Sinh OTP mới 6 số
+        String otp = emailService.generateOtp();
+
+        // 5. Lưu OTP mới vào Redis (ghi đè OTP cũ nếu còn)
+        redisService.saveOtp(request.getEmail(), otp, otpExpiryMinutes);
+
+        // 6. Đặt cooldown 60 giây — chống spam resend
+        redisService.setCooldown(request.getEmail(), 60);
+
+        // 7. Gửi email OTP bất đồng bộ qua Brevo SMTP
+        emailService.sendOtpEmail(request.getEmail(), otp);
     }
 }
