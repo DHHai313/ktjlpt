@@ -7,6 +7,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import kaito.jlpt.ktjlpt.dto.request.*;
 import kaito.jlpt.ktjlpt.dto.response.AuthenticationResponse;
+import kaito.jlpt.ktjlpt.dto.response.ForgotPasswordTokenResponse;
 import kaito.jlpt.ktjlpt.dto.response.IntrospectResponse;
 import kaito.jlpt.ktjlpt.entity.User;
 import kaito.jlpt.ktjlpt.enums.ErrorCode;
@@ -434,6 +435,17 @@ public class AuthenticationService {
      *
      * @param request Chứa email cần gửi lại OTP
      */
+    /**
+     * Gửi lại mã OTP mới đến email.
+     *
+     * Flow:
+     * 1. Tìm user theo email
+     * 2. Kiểm tra email chưa verify (đã verify thì không cần OTP)
+     * 3. Kiểm tra cooldown 60s (chống spam gửi liên tục)
+     * 4. Sinh OTP mới → lưu Redis → set cooldown → gửi email
+     *
+     * @param request Chứa email cần gửi lại OTP
+     */
     public void resendOtp(ResendOtpRequest request) {
         // 1. Tìm user theo email
         User user = userRepository.findByEmail(request.getEmail())
@@ -460,5 +472,111 @@ public class AuthenticationService {
 
         // 7. Gửi email OTP bất đồng bộ qua Brevo SMTP
         emailService.sendOtpEmail(request.getEmail(), otp);
+    }
+
+    // ======================== Forgot Password ========================
+
+    /**
+     * Bước 1 — Yêu cầu đặt lại mật khẩu: gửi OTP đến email.
+     *
+     * Flow:
+     * 1. Tìm user theo email — nếu không tồn tại vẫn trả 200 (bảo mật: không lộ email tồn tại)
+     * 2. Kiểm tra cooldown 60s (chống spam)
+     * 3. Sinh OTP 6 số → lưu Redis key "otp:reset:{email}" TTL 5 phút → set cooldown → gửi email
+     *
+     * @param request Chứa email cần đặt lại mật khẩu
+     */
+    public void forgotPassword(ForgotPasswordRequest request) {
+        // 1. Tìm user — nếu không tồn tại: im lặng (không throw) để bảo mật
+        var optionalUser = userRepository.findByEmail(request.getEmail());
+        if (optionalUser.isEmpty()) {
+            // Trả về bình thường, không báo lộ "email không tồn tại"
+            return;
+        }
+
+        // 2. Kiểm tra cooldown — chống spam liên tục
+        if (redisService.isResetOtpCooldownActive(request.getEmail())) {
+            throw new AppException(ErrorCode.RESET_OTP_COOLDOWN);
+        }
+
+        // 3. Sinh OTP 6 số
+        String otp = emailService.generateOtp();
+
+        // 4. Lưu OTP vào Redis với TTL = otpExpiryMinutes (key riêng biệt với verify email)
+        redisService.saveResetOtp(request.getEmail(), otp, otpExpiryMinutes);
+
+        // 5. Đặt cooldown 60 giây
+        redisService.setResetOtpCooldown(request.getEmail(), 60);
+
+        // 6. Gửi email OTP quên mật khẩu bất đồng bộ qua Brevo
+        emailService.sendForgotPasswordOtpEmail(request.getEmail(), otp);
+    }
+
+    /**
+     * Bước 2 — Xác minh OTP quên mật khẩu.
+     *
+     * Flow:
+     * 1. Lấy OTP từ Redis "otp:reset:{email}" — null = hết hạn / chưa gửi
+     * 2. So sánh OTP → sai thì throw INVALID_OTP
+     * 3. OTP đúng → xoá OTP khỏi Redis (không tái sử dụng)
+     * 4. Sinh reset token (UUID) → lưu Redis "pwd:reset:{email}" TTL 10 phút
+     * 5. Trả reset token về FE để dùng ở bước 3
+     *
+     * @param request Chứa email và mã OTP 6 số
+     * @return ForgotPasswordTokenResponse chứa resetToken
+     */
+    public ForgotPasswordTokenResponse verifyForgotOtp(VerifyForgotOtpRequest request) {
+        // 1. Lấy OTP từ Redis — null nghĩa là hết hạn hoặc chưa gửi
+        String storedOtp = redisService.getResetOtp(request.getEmail());
+        if (storedOtp == null || !storedOtp.equals(request.getOtp())) {
+            throw new AppException(ErrorCode.INVALID_OTP);
+        }
+
+        // 2. OTP đúng → xoá khỏi Redis (one-time use)
+        redisService.deleteResetOtp(request.getEmail());
+
+        // 3. Sinh reset token ngẫu nhiên (UUID) — TTL 10 phút (600 giây)
+        String resetToken = UUID.randomUUID().toString();
+        redisService.saveResetToken(request.getEmail(), resetToken, 600);
+
+        // 4. Trả reset token về FE
+        return ForgotPasswordTokenResponse.builder()
+                .resetToken(resetToken)
+                .build();
+    }
+
+    /**
+     * Bước 3 — Đặt mật khẩu mới sau khi OTP đã được xác minh.
+     *
+     * Flow:
+     * 1. Kiểm tra newPassword == confirmPassword
+     * 2. Lấy reset token từ Redis "pwd:reset:{email}" — null = hết hạn / chưa verify OTP
+     * 3. So sánh token — sai thì throw RESET_TOKEN_INVALID
+     * 4. Token đúng → encode & lưu mật khẩu mới → xoá reset token khỏi Redis
+     *
+     * @param request Chứa email, resetToken, newPassword, confirmPassword
+     */
+    public void resetPassword(ResetPasswordRequest request) {
+        // 1. Kiểm tra confirm password khớp
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new AppException(ErrorCode.PASSWORD_NOT_MATCH);
+        }
+
+        // 2. Lấy reset token từ Redis — null = hết hạn hoặc chưa verify OTP
+        String storedToken = redisService.getResetToken(request.getEmail());
+        if (storedToken == null || !storedToken.equals(request.getResetToken())) {
+            throw new AppException(ErrorCode.RESET_TOKEN_INVALID);
+        }
+
+        // 3. Tìm user theo email
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        // 4. Encode và lưu mật khẩu mới
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        // 5. Xoá reset token khỏi Redis — không cho dùng lại
+        redisService.deleteResetToken(request.getEmail());
     }
 }

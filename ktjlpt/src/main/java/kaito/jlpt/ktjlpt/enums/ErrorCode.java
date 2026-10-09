@@ -27,6 +27,10 @@ public enum ErrorCode {
     OTP_COOLDOWN(1014, "Please wait before requesting a new OTP", HttpStatus.TOO_MANY_REQUESTS),
     EMAIL_ALREADY_VERIFIED(1015, "Email is already verified", HttpStatus.BAD_REQUEST),
 
+    // === Forgot Password ===
+    RESET_TOKEN_INVALID(1016, "Reset token is invalid or expired", HttpStatus.BAD_REQUEST),
+    RESET_OTP_COOLDOWN(1017, "Please wait before requesting a new password reset OTP", HttpStatus.TOO_MANY_REQUESTS),
+
     ;
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {

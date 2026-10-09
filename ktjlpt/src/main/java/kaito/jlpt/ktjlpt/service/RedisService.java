@@ -103,4 +103,92 @@ public class RedisService {
                 redisTemplate.hasKey(OTP_COOLDOWN_PREFIX + email)
         );
     }
+
+    // ======================== Forgot Password OTP ========================
+
+    // Prefix cho OTP reset password: otp:reset:{email}
+    // Tách biệt với otp:verify:{email} để tránh nhầm lẫn
+    private static final String RESET_OTP_PREFIX = "otp:reset:";
+
+    // Prefix cho cooldown reset OTP: otp:reset:cooldown:{email}
+    private static final String RESET_OTP_COOLDOWN_PREFIX = "otp:reset:cooldown:";
+
+    // Prefix cho reset token sau khi OTP hợp lệ: pwd:reset:{email}
+    private static final String RESET_TOKEN_PREFIX = "pwd:reset:";
+
+    /**
+     * Lưu OTP quên mật khẩu vào Redis với TTL tính bằng phút.
+     */
+    public void saveResetOtp(String email, String otp, long expiryMinutes) {
+        redisTemplate.opsForValue().set(
+                RESET_OTP_PREFIX + email,
+                otp,
+                expiryMinutes,
+                TimeUnit.MINUTES
+        );
+    }
+
+    /**
+     * Lấy OTP quên mật khẩu theo email.
+     * Trả về null nếu OTP hết hạn hoặc chưa được tạo.
+     */
+    public String getResetOtp(String email) {
+        return (String) redisTemplate.opsForValue().get(RESET_OTP_PREFIX + email);
+    }
+
+    /**
+     * Xoá OTP quên mật khẩu sau khi verify thành công.
+     */
+    public void deleteResetOtp(String email) {
+        redisTemplate.delete(RESET_OTP_PREFIX + email);
+    }
+
+    /**
+     * Đặt cooldown chống spam resend OTP quên mật khẩu.
+     */
+    public void setResetOtpCooldown(String email, long cooldownSeconds) {
+        redisTemplate.opsForValue().set(
+                RESET_OTP_COOLDOWN_PREFIX + email,
+                "1",
+                cooldownSeconds,
+                TimeUnit.SECONDS
+        );
+    }
+
+    /**
+     * Kiểm tra cooldown gửi OTP quên mật khẩu.
+     */
+    public boolean isResetOtpCooldownActive(String email) {
+        return Boolean.TRUE.equals(
+                redisTemplate.hasKey(RESET_OTP_COOLDOWN_PREFIX + email)
+        );
+    }
+
+    /**
+     * Lưu reset token (UUID) sau khi OTP quên mật khẩu được xác minh.
+     * TTL tính bằng giây — mặc định 10 phút (600s).
+     */
+    public void saveResetToken(String email, String resetToken, long expirySeconds) {
+        redisTemplate.opsForValue().set(
+                RESET_TOKEN_PREFIX + email,
+                resetToken,
+                expirySeconds,
+                TimeUnit.SECONDS
+        );
+    }
+
+    /**
+     * Lấy reset token theo email.
+     * Trả về null nếu token hết hạn hoặc chưa tồn tại.
+     */
+    public String getResetToken(String email) {
+        return (String) redisTemplate.opsForValue().get(RESET_TOKEN_PREFIX + email);
+    }
+
+    /**
+     * Xoá reset token sau khi đổi mật khẩu thành công.
+     */
+    public void deleteResetToken(String email) {
+        redisTemplate.delete(RESET_TOKEN_PREFIX + email);
+    }
 }

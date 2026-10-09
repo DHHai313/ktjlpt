@@ -38,8 +38,11 @@ public class SecurityConfig {
     private static final String[] PUBLIC_ENDPOINTS = {"/auth/login"
             , "/auth/introspect", "/users", "/auth/change-password", "/swagger-ui/**",
             "/v3/api-docs/**", "/permissions", "/roles", "/auth/outbound/authentication", "/auth/outbound/**",
-            "/auth/verify-email",   // Xác thực OTP email — user chưa login vẫn cần truy cập
-            "/auth/resend-otp"      // Gửi lại OTP — user chưa login vẫn cần truy cập
+            "/auth/verify-email",       // Xác thực OTP email — user chưa login vẫn cần truy cập
+            "/auth/resend-otp",         // Gửi lại OTP — user chưa login vẫn cần truy cập
+            "/auth/forgot-password",    // Yêu cầu OTP quên mật khẩu — public
+            "/auth/verify-forgot-otp",  // Xác minh OTP quên mật khẩu — public
+            "/auth/reset-password"      // Đặt lại mật khẩu — public
     };
 
 

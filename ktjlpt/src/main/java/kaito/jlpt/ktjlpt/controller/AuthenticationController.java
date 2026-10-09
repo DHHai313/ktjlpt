@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import kaito.jlpt.ktjlpt.dto.request.*;
 import kaito.jlpt.ktjlpt.dto.response.ApiResponse;
 import kaito.jlpt.ktjlpt.dto.response.AuthenticationResponse;
+import kaito.jlpt.ktjlpt.dto.response.ForgotPasswordTokenResponse;
 import kaito.jlpt.ktjlpt.dto.response.IntrospectResponse;
 import kaito.jlpt.ktjlpt.service.AuthenticationService;
 import kaito.jlpt.ktjlpt.service.EmailService;
@@ -84,5 +85,43 @@ public class AuthenticationController {
     public ApiResponse<Void> resendOtp(@Valid @RequestBody ResendOtpRequest request) {
         authenticationService.resendOtp(request);
         return ApiResponse.<Void>builder().message("Resend otp successfully").build();
+    }
+
+    // ======================== Forgot Password ========================
+
+    /**
+     * Bước 1: Gửi OTP đặt lại mật khẩu đến email.
+     * Luôn trả 200 dù email không tồn tại (bảo mật: không lộ email).
+     */
+    @PostMapping("/forgot-password")
+    public ApiResponse<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authenticationService.forgotPassword(request);
+        return ApiResponse.<Void>builder()
+                .message("If your email is registered, you will receive a password reset OTP shortly")
+                .build();
+    }
+
+    /**
+     * Bước 2: Xác minh OTP — trả về resetToken để dùng ở bước 3.
+     */
+    @PostMapping("/verify-forgot-otp")
+    public ApiResponse<ForgotPasswordTokenResponse> verifyForgotOtp(
+            @Valid @RequestBody VerifyForgotOtpRequest request) {
+        ForgotPasswordTokenResponse result = authenticationService.verifyForgotOtp(request);
+        return ApiResponse.<ForgotPasswordTokenResponse>builder()
+                .result(result)
+                .message("OTP verified. Use the reset token to set your new password.")
+                .build();
+    }
+
+    /**
+     * Bước 3: Đặt mật khẩu mới bằng resetToken đã nhận ở bước 2.
+     */
+    @PostMapping("/reset-password")
+    public ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authenticationService.resetPassword(request);
+        return ApiResponse.<Void>builder()
+                .message("Password has been reset successfully")
+                .build();
     }
 }
