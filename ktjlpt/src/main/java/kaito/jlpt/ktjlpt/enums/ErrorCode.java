@@ -31,6 +31,19 @@ public enum ErrorCode {
     RESET_TOKEN_INVALID(1016, "Reset token is invalid or expired", HttpStatus.BAD_REQUEST),
     RESET_OTP_COOLDOWN(1017, "Please wait before requesting a new password reset OTP", HttpStatus.TOO_MANY_REQUESTS),
 
+    // === Exam ===
+    EXAM_NOT_FOUND(2000, "Exam not found", HttpStatus.NOT_FOUND),
+    EXAM_NOT_PUBLISHED(2001, "Exam is not published", HttpStatus.BAD_REQUEST),
+    SECTION_NOT_FOUND(2002, "Section not found", HttpStatus.NOT_FOUND),
+
+    // === Attempt ===
+    ATTEMPT_NOT_FOUND(3000, "Attempt not found", HttpStatus.NOT_FOUND),
+    ATTEMPT_ALREADY_IN_PROGRESS(3001, "You already have an in-progress attempt for this exam", HttpStatus.CONFLICT),
+    ATTEMPT_ALREADY_SUBMITTED(3002, "This attempt has already been submitted", HttpStatus.BAD_REQUEST),
+    ATTEMPT_EXPIRED(3003, "This attempt has expired", HttpStatus.BAD_REQUEST),
+    ATTEMPT_NOT_OWNED(3004, "You do not own this attempt", HttpStatus.FORBIDDEN),
+    SECTION_REQUIRED_FOR_SCOPE(3005, "sectionId is required when scope is SECTION", HttpStatus.BAD_REQUEST),
+
     ;
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {

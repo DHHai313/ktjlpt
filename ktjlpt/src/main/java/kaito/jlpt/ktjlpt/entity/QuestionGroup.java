@@ -3,9 +3,8 @@ package kaito.jlpt.ktjlpt.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-import org.hibernate.annotations.CreationTimestamp;
 
-import java.time.Instant;
+import java.util.List;
 
 @Data
 @Builder
@@ -13,28 +12,40 @@ import java.time.Instant;
 @NoArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @Entity
-@Table(name = "question_groups")
+@Table(
+    name = "question_groups",
+    indexes = {
+        @Index(name = "idx_qg_mondai_id", columnList = "mondai_id")
+    },
+    uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"mondai_id", "order_no"})
+    }
+)
 public class QuestionGroup {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     String id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "section_id", nullable = false)
-    ExamSection examSection;
+    @JoinColumn(name = "mondai_id", nullable = false)
+    Mondai mondai;
 
-    @ManyToOne
-    @JoinColumn(name = "passage_id")
-    private Passage passage;
+    @Column(name = "order_no", nullable = false)
+    Integer orderNo;
 
-    @Column(name = "content")
-    String content;
+    // Bài đọc / đoạn văn đục lỗ ([1], [2]...). Null nếu không có
+    @Column(name = "passage", columnDefinition = "TEXT")
+    String passage;
 
-    @Column(name = "image_url")
+    // Ảnh hoặc bảng dùng chung cho cả nhóm
+    @Column(name = "image_url", length = 500)
     String imageUrl;
 
-    @CreationTimestamp
-    @Column(name = "created_at")
-    Instant createdAt;
+    // Lời thoại phần nghe, chỉ trả sau khi nộp bài
+    @Column(name = "transcript", columnDefinition = "TEXT")
+    String transcript;
 
+    @OneToMany(mappedBy = "group", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    List<Question> questions;
 }

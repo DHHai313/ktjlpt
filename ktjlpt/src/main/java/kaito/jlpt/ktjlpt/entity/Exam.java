@@ -1,9 +1,11 @@
 package kaito.jlpt.ktjlpt.entity;
 
 import jakarta.persistence.*;
+import kaito.jlpt.ktjlpt.enums.JlptLevel;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 import java.util.List;
@@ -16,29 +18,33 @@ import java.util.List;
 @Entity
 @Table(name = "exams")
 public class Exam {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     String id;
 
-    @Column(name = "title")
+    @Column(nullable = false, length = 255)
     String title;
 
-    @Column(name = "level")
-    String level;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    JlptLevel level;
 
-    @Column(name = "total_time")
-    Integer totalTime;
+    @Column(name = "duration_minutes", nullable = false)
+    Integer durationMinutes;
 
-    @Column(name = "total_score")
-    Integer totalScore;
+    @Column(name = "is_published", nullable = false)
+    @Builder.Default
+    Boolean published = false;
 
-    @Column(name = "pass_score")
-    Integer passScore;
-    @OneToMany(mappedBy = "exams", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    List<ExamSection> sections;
+    @OneToMany(mappedBy = "exam", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    List<Section> sections;
 
     @CreationTimestamp
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     Instant createdAt;
 
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    Instant updatedAt;
 }

@@ -3,9 +3,6 @@ package kaito.jlpt.ktjlpt.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-import org.hibernate.annotations.CreationTimestamp;
-
-import java.time.Instant;
 
 @Data
 @Builder
@@ -13,26 +10,36 @@ import java.time.Instant;
 @NoArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @Entity
-@Table(name = "question_groups")
+@Table(
+    name = "question_options",
+    uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"question_id", "option_no"})
+    }
+)
 public class QuestionOption {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     String id;
 
-    @ManyToOne
-    @JoinColumn(name = "question", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "question_id", nullable = false)
     Question question;
 
-    @Column(nullable = false)
-    String content;
+    // Thứ tự hiển thị: 1..4
+    @Column(name = "option_no", nullable = false)
+    Integer optionNo;
 
-    @Column(name = "option_order")
-    Integer optionOrder;
+    // Null nếu đáp án là ảnh hoặc chỉ có nhãn A/B/C
+    @Column(name = "option_text", columnDefinition = "TEXT")
+    String optionText;
 
-    @Column(name = "is_correct")
-    Boolean isCorrect = false;
+    // Null nếu đáp án là chữ
+    @Column(name = "image_url", length = 500)
+    String imageUrl;
 
-    @CreationTimestamp
-    @Column(name = "created_at")
-    Instant createdAt;
+    // Đánh dấu đáp án đúng; không trả trường này khi user đang thi
+    @Column(name = "is_correct", nullable = false)
+    @Builder.Default
+    Boolean correct = false;
 }

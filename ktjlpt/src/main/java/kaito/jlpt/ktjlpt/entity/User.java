@@ -1,6 +1,7 @@
 package kaito.jlpt.ktjlpt.entity;
 
 import jakarta.persistence.*;
+import kaito.jlpt.ktjlpt.enums.JlptLevel;
 import kaito.jlpt.ktjlpt.enums.Provider;
 import kaito.jlpt.ktjlpt.enums.Role;
 import lombok.*;
@@ -36,8 +37,9 @@ public class User {
     @Column(nullable = false)
     Role role;
 
-    @Column(name = "current_level", length = 5)
-    String currentLevel;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "current_level", length = 10)
+    JlptLevel currentLevel;
 
     @Column(name = "avatar_url", length = 512)
     String avatarUrl;

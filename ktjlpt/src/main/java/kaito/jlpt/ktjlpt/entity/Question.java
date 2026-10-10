@@ -3,9 +3,7 @@ package kaito.jlpt.ktjlpt.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-import org.hibernate.annotations.CreationTimestamp;
 
-import java.time.Instant;
 import java.util.List;
 
 @Data
@@ -14,34 +12,46 @@ import java.util.List;
 @NoArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @Entity
-@Table(name = "questions")
+@Table(
+    name = "questions",
+    indexes = {
+        @Index(name = "idx_question_group_id", columnList = "group_id")
+    },
+    uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"exam_id", "question_no"})
+    }
+)
 public class Question {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     String id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "group_id", nullable = false)
     QuestionGroup group;
 
-    @ManyToOne
-    @JoinColumn(name = "passage_id")
-    Passage passage;
+    // Denormalize để load cả đề thuận tiện
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "exam_id", nullable = false)
+    Exam exam;
 
-    @Column(nullable = false)
-    private String content;
+    // Thứ tự trong group
+    @Column(name = "order_no", nullable = false)
+    Integer orderNo;
 
-    @Column(name = "image_url")
-    private String imageUrl;
+    // Thứ tự toàn đề, dùng cho bảng điều hướng
+    @Column(name = "question_no", nullable = false)
+    Integer questionNo;
 
-    @Column(name = "question_order")
-    private Integer questionOrder;
+    // Null nếu câu hỏi chỉ có nhãn A/B/C
+    @Column(name = "content", columnDefinition = "TEXT")
+    String content;
 
-    @OneToMany(mappedBy = "question", fetch = FetchType.LAZY)
-    private List<QuestionOption> options;
+    // Giải thích đáp án sau khi nộp bài
+    @Column(name = "explanation", columnDefinition = "TEXT")
+    String explanation;
 
-    @CreationTimestamp
-    @Column(name = "created_at")
-    private Instant createdAt;
-
+    @OneToMany(mappedBy = "question", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    List<QuestionOption> options;
 }
