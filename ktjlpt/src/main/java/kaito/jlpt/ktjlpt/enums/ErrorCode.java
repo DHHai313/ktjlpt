@@ -44,6 +44,13 @@ public enum ErrorCode {
     ATTEMPT_NOT_OWNED(3004, "You do not own this attempt", HttpStatus.FORBIDDEN),
     SECTION_REQUIRED_FOR_SCOPE(3005, "sectionId is required when scope is SECTION", HttpStatus.BAD_REQUEST),
 
+    // === Excel Import ===
+    EXCEL_INVALID_FORMAT(4000, "File must be .xlsx format", HttpStatus.BAD_REQUEST),
+    EXCEL_FILE_TOO_LARGE(4001, "File size must be less than 10MB", HttpStatus.BAD_REQUEST),
+    EXCEL_MISSING_SHEET(4002, "Missing required sheet", HttpStatus.BAD_REQUEST),
+    EXCEL_MISSING_HEADER(4003, "Missing required column header", HttpStatus.BAD_REQUEST),
+    EXCEL_VALIDATION_FAILED(4004, "Excel data validation failed", HttpStatus.BAD_REQUEST),
+    EXCEL_PARSE_ERROR(4005, "Failed to parse Excel file", HttpStatus.BAD_REQUEST),
     ;
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {

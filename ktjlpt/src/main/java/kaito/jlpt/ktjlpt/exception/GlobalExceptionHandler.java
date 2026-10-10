@@ -1,12 +1,16 @@
 package kaito.jlpt.ktjlpt.exception;
 
+import kaito.jlpt.ktjlpt.dto.excel.ExcelImportErrorDto;
 import kaito.jlpt.ktjlpt.dto.response.ApiResponse;
 import kaito.jlpt.ktjlpt.enums.ErrorCode;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+
+import java.util.List;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -47,5 +51,16 @@ public class GlobalExceptionHandler {
         apiResponse.setCode(errorCode.getCode());
         apiResponse.setMessage(errorCode.getMessage());
         return ResponseEntity.status(errorCode.getStatusCode()).body(apiResponse);
+    }
+
+    @ExceptionHandler(value = ExcelValidationException.class)
+    ResponseEntity<ApiResponse<List<ExcelImportErrorDto>>> handlingExcelValidation(ExcelValidationException ex) {
+        List<ExcelImportErrorDto> errors = ex.getErrors();
+        ApiResponse<List<ExcelImportErrorDto>> apiResponse = ApiResponse.<List<ExcelImportErrorDto>>builder()
+                .code(ErrorCode.EXCEL_VALIDATION_FAILED.getCode())
+                .message(ErrorCode.EXCEL_VALIDATION_FAILED.getMessage() + " (" + errors.size() + " error(s))")
+                .result(errors)
+                .build();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(apiResponse);
     }
 }
