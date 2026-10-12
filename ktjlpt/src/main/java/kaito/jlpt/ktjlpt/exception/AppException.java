@@ -8,8 +8,17 @@ import lombok.Setter;
 
 @Getter
 @Setter
-@AllArgsConstructor
 @NoArgsConstructor
 public class AppException extends RuntimeException {
     private ErrorCode errorCode;
+
+    public AppException(ErrorCode errorCode) {
+        super(errorCode != null ? errorCode.getMessage() : null);
+        this.errorCode = errorCode;
+    }
+
+    public AppException(ErrorCode errorCode, String message) {
+        super(message);
+        this.errorCode = errorCode;
+    }
 }

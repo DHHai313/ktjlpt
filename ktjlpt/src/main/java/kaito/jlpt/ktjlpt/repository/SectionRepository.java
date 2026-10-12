@@ -14,4 +14,6 @@ public interface SectionRepository extends JpaRepository<Section, String> {
     List<Section> findByExamIdOrderByOrderNoAsc(String examId);
 
     Optional<Section> findByExamIdAndSectionType(String examId, SectionType sectionType);
+
+    long countByExamId(String examId);
 }

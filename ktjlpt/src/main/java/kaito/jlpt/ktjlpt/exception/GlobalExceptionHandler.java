@@ -26,7 +26,10 @@ public class GlobalExceptionHandler {
         ErrorCode errorCode = ex.getErrorCode();
         ApiResponse apiResponse = new ApiResponse();
         apiResponse.setCode(errorCode.getCode());
-        apiResponse.setMessage(errorCode.getMessage());
+        String message = (ex.getMessage() != null && !ex.getMessage().isBlank())
+                ? ex.getMessage()
+                : errorCode.getMessage();
+        apiResponse.setMessage(message);
         return ResponseEntity.status(errorCode.getStatusCode()).body(apiResponse);
     }
     @ExceptionHandler(value = MethodArgumentNotValidException.class)

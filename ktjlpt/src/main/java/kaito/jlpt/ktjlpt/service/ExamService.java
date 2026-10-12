@@ -11,6 +11,7 @@ import kaito.jlpt.ktjlpt.repository.SectionRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,14 +42,35 @@ public class ExamService {
                 .collect(Collectors.toList());
     }
 
+    public List<ExamSummaryResponse> getExams(JlptLevel level, Boolean published) {
+        List<Exam> exams;
+        if (level != null && published != null) {
+            exams = examRepository.findByLevelAndPublished(level, published);
+        } else if (level != null) {
+            exams = examRepository.findByLevel(level);
+        } else if (published != null) {
+            exams = examRepository.findByPublished(published);
+        } else {
+            exams = examRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
+        }
+        return exams.stream()
+                .map(this::toSummary)
+                .collect(Collectors.toList());
+    }
+
     // ─── Lấy chi tiết đề thi để làm bài (không có đáp án) ───────────────────
 
     @Transactional(readOnly = true)
     public ExamDetailResponse getExamForAttempt(String examId) {
+        return getExamForAttempt(examId, false);
+    }
+
+    @Transactional(readOnly = true)
+    public ExamDetailResponse getExamForAttempt(String examId, boolean isAdmin) {
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new AppException(ErrorCode.EXAM_NOT_FOUND));
 
-        if (!exam.getPublished()) {
+        if (!isAdmin && !Boolean.TRUE.equals(exam.getPublished())) {
             throw new AppException(ErrorCode.EXAM_NOT_PUBLISHED);
         }
 
@@ -57,7 +79,7 @@ public class ExamService {
 
     // ─── Mapping ─────────────────────────────────────────────────────────────
 
-    private ExamSummaryResponse toSummary(Exam exam) {
+    public ExamSummaryResponse toSummary(Exam exam) {
         return ExamSummaryResponse.builder()
                 .id(exam.getId())
                 .title(exam.getTitle())

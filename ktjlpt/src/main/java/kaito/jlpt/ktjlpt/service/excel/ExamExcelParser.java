@@ -156,12 +156,11 @@ public class ExamExcelParser {
                 errors.add(ExcelImportErrorDto.builder().row(i).column("Option 3").message("Option 3 is required").build());
                 rowHasErrors = true;
             }
-            if (opt4 == null || opt4.isBlank()) {
-                errors.add(ExcelImportErrorDto.builder().row(i).column("Option 4").message("Option 4 is required").build());
-                rowHasErrors = true;
-            }
-            if (correctOption == null || correctOption < 1 || correctOption > 4) {
-                errors.add(ExcelImportErrorDto.builder().row(i).column("Correct Option").message("Correct Option must be between 1 and 4").build());
+            // Option 4 is optional (JLPT questions can have 3 or 4 options)
+            boolean hasOpt4 = opt4 != null && !opt4.isBlank();
+            int maxOption = hasOpt4 ? 4 : 3;
+            if (correctOption == null || correctOption < 1 || correctOption > maxOption) {
+                errors.add(ExcelImportErrorDto.builder().row(i).column("Correct Option").message("Correct Option must be between 1 and " + maxOption).build());
                 rowHasErrors = true;
             }
             if (questionNo != null && !questionNumbers.add(questionNo)) {
@@ -241,7 +240,9 @@ public class ExamExcelParser {
             addOption(question, 1, opt1, correctOption == 1);
             addOption(question, 2, opt2, correctOption == 2);
             addOption(question, 3, opt3, correctOption == 3);
-            addOption(question, 4, opt4, correctOption == 4);
+            if (hasOpt4) {
+                addOption(question, 4, opt4, correctOption == 4);
+            }
         }
     }
 

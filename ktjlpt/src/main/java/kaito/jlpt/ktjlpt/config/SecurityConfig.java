@@ -36,7 +36,7 @@ public class SecurityConfig {
     private final PasswordEncoder passwordEncoder;
     // Các endpoint không cần authentication (public access)
     private static final String[] PUBLIC_ENDPOINTS = {"/auth/login"
-            , "/auth/introspect", "/users", "/auth/change-password", "/swagger-ui/**",
+            , "/auth/introspect", "/auth/change-password", "/swagger-ui/**", "/auth/refresh", "/auth/logout",
             "/v3/api-docs/**", "/permissions", "/roles", "/auth/outbound/authentication", "/auth/outbound/**",
             "/auth/verify-email",       // Xác thực OTP email — user chưa login vẫn cần truy cập
             "/auth/resend-otp",         // Gửi lại OTP — user chưa login vẫn cần truy cập
@@ -54,6 +54,7 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.POST, "/users").permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .anyRequest().authenticated()
                 ).addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -73,7 +74,7 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
 
         config.setAllowedOrigins(List.of("http://localhost:3000"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 

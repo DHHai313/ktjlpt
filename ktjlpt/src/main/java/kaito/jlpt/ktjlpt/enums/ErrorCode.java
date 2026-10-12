@@ -35,6 +35,11 @@ public enum ErrorCode {
     EXAM_NOT_FOUND(2000, "Exam not found", HttpStatus.NOT_FOUND),
     EXAM_NOT_PUBLISHED(2001, "Exam is not published", HttpStatus.BAD_REQUEST),
     SECTION_NOT_FOUND(2002, "Section not found", HttpStatus.NOT_FOUND),
+    EXAM_NOT_PUBLISHABLE(2003, "Exam cannot be published due to validation errors", HttpStatus.BAD_REQUEST),
+    EXAM_HAS_ATTEMPTS(2004, "Exam has attempts and cannot be deleted. Consider unpublishing instead", HttpStatus.BAD_REQUEST),
+    TITLE_INVALID(2005, "Title is required and must not exceed 255 characters", HttpStatus.BAD_REQUEST),
+    DURATION_INVALID(2006, "Duration must be greater than 0 minutes", HttpStatus.BAD_REQUEST),
+    LEVEL_INVALID(2007, "JLPT level is required", HttpStatus.BAD_REQUEST),
 
     // === Attempt ===
     ATTEMPT_NOT_FOUND(3000, "Attempt not found", HttpStatus.NOT_FOUND),

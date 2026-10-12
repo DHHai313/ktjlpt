@@ -28,4 +28,6 @@ public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, String
     // Tìm các attempt đã hết hạn nhưng chưa EXPIRED (dùng cho scheduler)
     @Query("SELECT a FROM ExamAttempt a WHERE a.status = 'IN_PROGRESS' AND a.expiresAt IS NOT NULL AND a.expiresAt < :now")
     List<ExamAttempt> findExpiredAttempts(Instant now);
+
+    boolean existsByExamId(String examId);
 }
